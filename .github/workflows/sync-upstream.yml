@@ -1,0 +1,112 @@
+name: Sync with Upstream (9router)
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_apply_patches:
+        description: 'Auto-apply HydraROUTER patches after merge'
+        required: true
+        default: true
+        type: boolean
+  schedule:
+    # Run weekly on Sunday at 02:00 UTC
+    - cron: '0 2 * * 0'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout HydraROUTER
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "HydraROUTER Bot"
+          git config user.email "hydraromania@users.noreply.github.com"
+
+      - name: Add Upstream (9router)
+        run: |
+          git remote add upstream https://github.com/decolua/9router.git
+          git remote -v
+
+      - name: Fetch from Upstream
+        run: |
+          git fetch upstream master
+          echo "=== Upstream commits ==="
+          git log --oneline upstream/master -10
+
+      - name: Check for Updates
+        id: check
+        run: |
+          BEHIND=$(git rev-list --count HEAD..upstream/master 2>/dev/null || echo "0")
+          echo "Commits behind upstream: $BEHIND"
+          echo "behind=$BEHIND" >> $GITHUB_OUTPUT
+
+      - name: Merge Upstream Changes
+        if: steps.check.outputs.behind != '0'
+        run: |
+          echo "Merging upstream/master into master..."
+          git merge upstream/master --no-edit --no-ff || true
+
+      - name: Resolve Conflicts (if any)
+        if: steps.check.outputs.behind != '0'
+        run: |
+          CONFLICTS=$(git diff --name-only --diff-filter=U)
+          if [ -n "$CONFLICTS" ]; then
+            echo "=== Conflicts detected in: ==="
+            echo "$CONFLICTS"
+            echo ""
+            echo "Attempting to resolve by taking our version (HydraROUTER) for patches/"
+            for f in $CONFLICTS; do
+              if [[ "$f" == patches/* ]] || [[ "$f" == "restore-patches.sh" ]]; then
+                echo "Keeping our version for: $f"
+                git checkout --ours "$f"
+                git add "$f"
+              else
+                echo "Keeping upstream version for: $f"
+                git checkout --theirs "$f"
+                git add "$f"
+              fi
+            done
+            git commit --no-edit
+          else
+            echo "No conflicts detected."
+          fi
+
+      - name: Apply HydraROUTER Patches
+        if: steps.check.outputs.behind != '0' && (inputs.auto_apply_patches == true || github.event_name == 'schedule')
+        run: |
+          if [ -f "restore-patches.sh" ]; then
+            echo "Running restore-patches.sh..."
+            bash restore-patches.sh || echo "Warning: patch restore had some issues"
+          else
+            echo "restore-patches.sh not found, skipping."
+          fi
+
+      - name: Commit Patch Restore (if any changes)
+        if: steps.check.outputs.behind != '0'
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore: re-apply HydraROUTER patches after upstream sync [skip ci]"
+          fi
+
+      - name: Push to HydraROUTER
+        if: steps.check.outputs.behind != '0'
+        run: |
+          git push origin master
+          echo "✅ Sync complete! HydraROUTER is now up to date with 9router."
+
+      - name: No Updates Available
+        if: steps.check.outputs.behind == '0'
+        run: |
+          echo "✅ HydraROUTER is already up to date with 9router (upstream)."
