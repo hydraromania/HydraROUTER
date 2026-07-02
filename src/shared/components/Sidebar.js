@@ -10,7 +10,6 @@ import { MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import Button from "./Button";
 import { ConfirmModal } from "./Modal";
-import NineRemotePromoModal from "./NineRemotePromoModal";
 
 // const VISIBLE_MEDIA_KINDS = ["embedding", "image", "imageToText", "tts", "stt", "webSearch", "webFetch", "video", "music"];
 const VISIBLE_MEDIA_KINDS = ["embedding", "image", "tts", "stt"];
@@ -29,7 +28,6 @@ const navItems = [
 ];
 
 const debugItems = [
-  { href: "/dashboard/console-log", label: "Console Log", icon: "terminal" },
   { href: "/dashboard/translator", label: "Translator", icon: "translate" },
 ];
 
@@ -41,7 +39,6 @@ const systemItems = [
 export default function Sidebar({ onClose }) {
   const pathname = usePathname();
   const [mediaOpen, setMediaOpen] = useState(false);
-  const [showRemoteModal, setShowRemoteModal] = useState(false);
   const [isDisconnected, setIsDisconnected] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -288,23 +285,9 @@ export default function Sidebar({ onClose }) {
                   <span className="text-[13px] font-medium">{item.label}</span>
                 </Link>
               ) : null;
-            })}
-
-            {/* Remote */}
-            <button
-              onClick={() => setShowRemoteModal(true)}
-              className={cn(
-                "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group w-full",
-                "text-text-muted hover:bg-surface-2 hover:text-text-main"
-              )}
-            >
-              <span className="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors">
-                computer
-              </span>
-              <span className="text-[13px] font-medium">Remote</span>
-            </button>
-
-            {/* Settings */}
+             })}
+             
+             {/* Settings */}
             <Link
               href="/dashboard/profile"
               onClick={onClose}
@@ -329,9 +312,6 @@ export default function Sidebar({ onClose }) {
         </nav>
 
       </aside>
-
-      {/* Remote Promo Modal */}
-      <NineRemotePromoModal isOpen={showRemoteModal} onClose={() => setShowRemoteModal(false)} />
 
       {/* Update Confirmation Modal */}
       <ConfirmModal

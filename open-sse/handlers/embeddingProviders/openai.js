@@ -17,13 +17,14 @@ export default function createOpenAIEmbeddingAdapter(providerId) {
     buildHeaders: (creds) => {
       return { "Content-Type": "application/json", ...bearerAuth(creds), ...(cfg.headers || {}) };
     },
-    buildBody: (model, { input, encoding_format, dimensions }) => {
+    buildBody: (model, { input, encoding_format, dimensions, input_type }) => {
       const body = { model, input };
       if (encoding_format) body.encoding_format = encoding_format;
       if (dimensions != null && dimensions !== "") {
         const dim = Number(dimensions);
         if (Number.isFinite(dim) && dim > 0) body.dimensions = dim;
       }
+      if (input_type) body.input_type = input_type;
       return body;
     },
     normalize: (responseBody) => responseBody,

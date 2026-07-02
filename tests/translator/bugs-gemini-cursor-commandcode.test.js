@@ -21,6 +21,61 @@ describe("OpenAI → Gemini", () => {
     });
     expect(JSON.stringify(out.systemInstruction), "earlier system lost").toContain("RULE_ONE");
   });
+
+  // normalizeGeminiContents — collapse adjacent same-role entries
+  it("merges two adjacent user turns into one content entry", () => {
+    const out = O2G({
+      messages: [
+        { role: "user", content: "first" },
+        { role: "user", content: "second" },
+      ],
+    });
+    expect(out.contents).toHaveLength(1);
+    expect(out.contents[0].role).toBe("user");
+    const texts = out.contents[0].parts.map((p) => p.text);
+    expect(texts).toEqual(["first", "second"]);
+  });
+
+  it("merges tool-result user entry with following user text entry", () => {
+    const out = O2G({
+      messages: [
+        { role: "user", content: "calculate" },
+        { role: "assistant", content: "", tool_calls: [
+          { id: "call_1", type: "function", function: { name: "add", arguments: '{"a":1,"b":2}' } },
+        ] },
+        { role: "tool", tool_call_id: "call_1", content: "3" },
+        { role: "user", content: "thanks" },
+      ],
+    });
+    // Expect: user(calculate), model(functionCall), user(functionResponse + thanks)
+    expect(out.contents).toHaveLength(3);
+    expect(out.contents[0].role).toBe("user");
+    expect(out.contents[1].role).toBe("model");
+    expect(out.contents[2].role).toBe("user");
+    // The merged user entry has functionResponse + text
+    const lastUser = out.contents[2];
+    const hasFuncResp = lastUser.parts.some((p) => p.functionResponse);
+    const hasText = lastUser.parts.some((p) => p.text === "thanks");
+    expect(hasFuncResp).toBe(true);
+    expect(hasText).toBe(true);
+  });
+
+  it("leaves normal alternating conversation unchanged", () => {
+    const out = O2G({
+      messages: [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "hi there" },
+        { role: "user", content: "how are you" },
+      ],
+    });
+    expect(out.contents).toHaveLength(3);
+    expect(out.contents[0].role).toBe("user");
+    expect(out.contents[0].parts[0].text).toBe("hello");
+    expect(out.contents[1].role).toBe("model");
+    expect(out.contents[1].parts[0].text).toBe("hi there");
+    expect(out.contents[2].role).toBe("user");
+    expect(out.contents[2].parts[0].text).toBe("how are you");
+  });
 });
 
 describe("OpenAI → Cursor", () => {
