@@ -46,7 +46,7 @@ log "Versiune curentă: $(jq -r '.version' package.json)"
 # =============================================
 # 1. Verificare modificări locale
 # =============================================
-if git diff --quiet && git diff --cached --quiet; then
+if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ]; then
   log "📝 Nici o modificare locală."
   HAS_LOCAL_CHANGES=false
 else
