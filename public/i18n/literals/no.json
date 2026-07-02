@@ -176,7 +176,7 @@
   "How it works:": "Slik fungerer det:",
   "Antigravity/Copilot IDE request → DNS redirect to localhost:443 → MITM proxy intercepts → 9Router → response to Antigravity/Copilot": "Antigravity/Copilot IDE-forespørsel → DNS-omdirigering til localhost:443 → MITM-proxy avlytt → 9Router → svar til Antigravity/Copilot",
   "No API keys — create one in Keys page": "Ingen API-nøkler — lag en på Keys-siden",
-  "sk_9router (default)": "sk_9router (standard)",
+  "sk_hydrarouter (default)": "sk_hydrarouter (standard)",
   "Server started": "Server startet",
   "Failed to start server": "Klarte ikke å starte server",
   "Server stopped — all DNS cleared": "Server stoppet — alle DNS ryddet",

@@ -1,4 +1,4 @@
-docker stop 9router
-docker rm 9router
-docker build -t 9router .
-docker run -d --name 9router -p 20128:20128 --env-file .env -v 9router-data:/app/data 9router
+docker stop hydrarouter
+docker rm hydrarouter
+docker build -t hydrarouter .
+docker run -d --name hydrarouter -p 20128:20128 --env-file .env -v hydrarouter-data:/app/data hydrarouter

@@ -343,7 +343,7 @@ amp --model "{{model}}"
       },
       {
         type: "info",
-        text: "Configure 9router as an OpenAI-compatible provider to route all jcode requests through 9router's optimization layer."
+        text: "Configure HydraROUTER as an OpenAI-compatible provider to route all jcode requests through HydraROUTER's optimization layer."
       },
       {
         type: "warning",

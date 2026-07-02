@@ -611,7 +611,7 @@
   "Token Saver": "Token 节省器",
   "Experimental": "实验性",
   "Compress tool output to reduce token usage.": "压缩工具输出以减少 Token 使用量。",
-  "sk_9router (default)": "sk_9router（默认）",
+  "sk_hydrarouter (default)": "sk_hydrarouter（默认）",
   "Install Tailscale": "安装 Tailscale",
   "Installing Tailscale...": "正在安装 Tailscale...",
   "Tailscale installed": "Tailscale 已安装",

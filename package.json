@@ -1,7 +1,7 @@
 {
-  "name": "9router-app",
+  "name": "hydrarouter-app",
   "version": "0.5.15",
-  "description": "9Router web dashboard",
+  "description": "HydraROUTER web dashboard",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack --port 20127",
