@@ -6,7 +6,7 @@ module.exports = {
       cwd: "/root/hydrarouter",
       env: {
         NODE_ENV: "production",
-        PORT: "20128",
+        PORT: "4400",
         HOSTNAME: "0.0.0.0",
         DATA_DIR: "/root/.hydrarouter",
       },

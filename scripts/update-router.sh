@@ -156,7 +156,7 @@ sleep 3
 CURRENT_VER=$(jq -r '.version' package.json)
 if pm2 show hydrarouter 2>/dev/null | grep -q "online"; then
   log "✅ HydraROUTER v$CURRENT_VER pornit cu succes!"
-  log "   🌐 http://localhost:20128"
+  log "   🌐 http://localhost:4400"
 else
   log "⚠️  HydraROUTER nu e online. Verifică pm2 logs."
   pm2 logs hydrarouter --lines 10 2>&1 | tee -a "$LOG_FILE"
