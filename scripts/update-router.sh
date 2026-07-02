@@ -139,6 +139,12 @@ log "🔨 Build..."
 npm install --prefer-offline 2>&1 | tee -a "$LOG_FILE" || true
 if npm run build 2>&1 | tee -a "$LOG_FILE"; then
   log "✅ Build reușit!"
+  # Copiază modulele SQLite în standalone (necesare pentru runtime)
+  STANDALONE_NM="/root/hydrarouter/.next/standalone/node_modules"
+  if [ -d "$STANDALONE_NM" ]; then
+    cp -r /root/hydrarouter/node_modules/better-sqlite3 "$STANDALONE_NM/" 2>/dev/null && log "  ✅ better-sqlite3 copiat în standalone"
+    cp -r /root/hydrarouter/node_modules/sql.js "$STANDALONE_NM/" 2>/dev/null && log "  ✅ sql.js copiat în standalone"
+  fi
 else
   log "❌ Build eșuat. HydraROUTER va rula cu versiunea anterioară."
   pm2 restart hydrarouter 2>&1 | tee -a "$LOG_FILE" || true
