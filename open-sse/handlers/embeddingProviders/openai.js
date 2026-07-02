@@ -24,7 +24,10 @@ export default function createOpenAIEmbeddingAdapter(providerId) {
         const dim = Number(dimensions);
         if (Number.isFinite(dim) && dim > 0) body.dimensions = dim;
       }
-      if (input_type) body.input_type = input_type;
+      // NVIDIA asymmetric retrieval models (e.g. nvidia/nv-embedqa-e5-v5) require `input_type`.
+      // Default to "query" when client didn't specify.
+      if (providerId === "nvidia" && !input_type) body.input_type = "query";
+      else if (input_type) body.input_type = input_type;
       return body;
     },
     normalize: (responseBody) => responseBody,
