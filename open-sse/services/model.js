@@ -134,3 +134,24 @@ function inferProviderFromModelName(modelName) {
   const m = modelName.toLowerCase();
   return MODEL_PREFIX_PROVIDERS.find(([re]) => re.test(m))?.[1] || "openai";
 }
+
+/**
+ * Get per-model default parameters (max_tokens, temperature, top_p, etc.)
+ * Defined in the provider registry entry's model `defaults` field.
+ * Falls back to empty object if no defaults defined.
+ * @param {string} providerAlias - Provider alias or ID (e.g. "nvidia")
+ * @param {string} modelId - Model ID (e.g. "minimaxai/minimax-m3")
+ * @returns {object} defaults object or empty object
+ */
+export function getModelDefaults(providerAlias, modelId) {
+  if (!providerAlias || !modelId) return {};
+  const entry = REGISTRY.find(
+    (r) => r.id === providerAlias || r.alias === providerAlias
+  );
+  if (!entry?.models) return {};
+  const model = entry.models.find((m) => {
+    const id = typeof m === "string" ? m : m.id;
+    return id === modelId;
+  });
+  return model?.defaults || {};
+}

@@ -1,4 +1,5 @@
 import { detectFormat, getTargetFormat, resolveTransport } from "../services/provider.js";
+import { getModelDefaults } from "../services/model.js";
 import { translateRequest } from "../translator/index.js";
 import { FORMATS } from "../translator/formats.js";
 import { normalizeClaudePassthrough } from "../translator/formats/claude.js";
@@ -52,6 +53,17 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (runtimeTransport && credentials) credentials.runtimeTransport = runtimeTransport;
   const stripList = getModelStrip(alias, model);
   const upstreamModel = getModelUpstreamId(alias, model);
+
+  // Apply per-model default parameters (max_tokens, temperature, top_p, etc.)
+  // Only sets values the client didn't explicitly provide (nullish coalescing).
+  const modelDefaults = getModelDefaults(alias, model);
+  if (modelDefaults && Object.keys(modelDefaults).length > 0) {
+    for (const [key, value] of Object.entries(modelDefaults)) {
+      if (body[key] === undefined || body[key] === null) {
+        body = { ...body, [key]: value };
+      }
+    }
+  }
 
   // Inject provider-level thinking config override (only if client hasn't set)
   // on/off → extended type (body.thinking), none/low/medium/high → effort type (body.reasoning_effort)

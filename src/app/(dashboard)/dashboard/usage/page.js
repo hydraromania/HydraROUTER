@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { UsageStats, RequestLogger, CardSkeleton, SegmentedControl } from "@/shared/components";
 import RequestDetailsTab from "./components/RequestDetailsTab";
+import ConsoleLogClient from "../console-log/ConsoleLogClient";
 
 const PERIODS = [
   { value: "today", label: "Today" },
@@ -28,7 +29,7 @@ function UsageContent() {
   const [period, setPeriod] = useState("today");
 
   const tabFromUrl = searchParams.get("tab");
-  const activeTab = tabFromUrl && ["overview", "logs", "details"].includes(tabFromUrl)
+  const activeTab = tabFromUrl && ["overview", "logs", "details", "console"].includes(tabFromUrl)
     ? tabFromUrl
     : "overview";
 
@@ -47,6 +48,7 @@ function UsageContent() {
           options={[
             { value: "overview", label: "Overview" },
             { value: "details", label: "Details" },
+            { value: "console", label: "Console" },
           ]}
           value={activeTab}
           onChange={handleTabChange}
@@ -70,6 +72,15 @@ function UsageContent() {
       )}
       {activeTab === "logs" && <RequestLogger />}
       {activeTab === "details" && <RequestDetailsTab />}
+      {activeTab === "console" && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 px-1">
+            <span className="material-symbols-outlined text-[18px] text-text-muted">terminal</span>
+            <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Console Log</span>
+          </div>
+          <ConsoleLogClient />
+        </div>
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { AI_PROVIDERS } from "@/shared/constants/providers";
 import * as log from "../utils/logger.js";
+import { saveRequestUsage } from "@/lib/usageDb.js";
 
 // Providers requiring credentials for STT
 const CREDENTIALED_PROVIDERS = new Set(
@@ -48,7 +49,15 @@ export async function handleStt(request) {
   // noAuth providers
   if (!CREDENTIALED_PROVIDERS.has(provider)) {
     const result = await handleSttCore({ provider, model, formData, sttConfig: AI_PROVIDERS[provider]?.sttConfig });
-    if (result.success) return result.response;
+    if (result.success) {
+      saveRequestUsage({
+        provider, model,
+        endpoint: "/v1/audio/transcriptions",
+        tokens: {},
+        status: "ok",
+      });
+      return result.response;
+    }
     return errorResponse(result.status || HTTP_STATUS.BAD_GATEWAY, result.error || "STT failed");
   }
 
@@ -74,7 +83,16 @@ export async function handleStt(request) {
 
     const result = await handleSttCore({ provider, model, formData, credentials, sttConfig: AI_PROVIDERS[provider]?.sttConfig });
 
-    if (result.success) return result.response;
+    if (result.success) {
+      saveRequestUsage({
+        provider, model,
+        connectionId: credentials.connectionId,
+        endpoint: "/v1/audio/transcriptions",
+        tokens: {},
+        status: "ok",
+      });
+      return result.response;
+    }
 
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model);
     if (shouldFallback) {

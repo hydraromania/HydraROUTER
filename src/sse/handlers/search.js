@@ -12,6 +12,7 @@ import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
+import { saveRequestUsage } from "@/lib/usageDb.js";
 import { handleComboChat, getComboModelsFromData } from "open-sse/services/combo.js";
 
 /**
@@ -139,7 +140,15 @@ async function handleSingleProviderSearch(body, providerInput, request, apiKey, 
       credentials: null,
       log
     });
-    if (result.success) return result.response;
+    if (result.success) {
+      saveRequestUsage({
+        provider: providerId, model: providerId,
+        endpoint: "/v1/search",
+        tokens: {},
+        status: "ok",
+      });
+      return result.response;
+    }
     return result.response;
   }
 
@@ -189,7 +198,17 @@ async function handleSingleProviderSearch(body, providerInput, request, apiKey, 
       }
     });
 
-    if (result.success) return result.response;
+    if (result.success) {
+      saveRequestUsage({
+        provider: providerId, model: providerId,
+        connectionId: credentials.connectionId,
+        apiKey: apiKey || null,
+        endpoint: "/v1/search",
+        tokens: {},
+        status: "ok",
+      });
+      return result.response;
+    }
 
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, providerId);
 

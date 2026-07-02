@@ -12,6 +12,7 @@ import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
+import { saveRequestUsage } from "@/lib/usageDb.js";
 import { handleComboChat, getComboModelsFromData } from "open-sse/services/combo.js";
 import { assertPublicUrl } from "@/shared/utils/ssrfGuard.js";
 
@@ -146,6 +147,12 @@ async function handleSingleProviderFetch(body, providerInput, request, apiKey, s
       log
     });
     if (result.success) {
+      saveRequestUsage({
+        provider: providerId, model: providerId,
+        endpoint: "/v1/web/fetch",
+        tokens: {},
+        status: "ok",
+      });
       return new Response(JSON.stringify(result.data), {
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
       });
@@ -202,6 +209,14 @@ async function handleSingleProviderFetch(body, providerInput, request, apiKey, s
     });
 
     if (result.success) {
+      saveRequestUsage({
+        provider: providerId, model: providerId,
+        connectionId: credentials.connectionId,
+        apiKey: apiKey || null,
+        endpoint: "/v1/web/fetch",
+        tokens: {},
+        status: "ok",
+      });
       return new Response(JSON.stringify(result.data), {
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
       });

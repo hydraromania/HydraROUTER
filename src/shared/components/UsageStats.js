@@ -68,9 +68,15 @@ function RecentRequests({ requests = [] }) {
                     </td>
                     <td className="py-1.5 font-mono truncate max-w-[120px]" title={r.model}>{r.model}</td>
                     <td className="py-1.5 text-right whitespace-nowrap">
-                      <span className="text-primary">{fmt(r.promptTokens)}↑</span>
-                      {" "}
-                      <span className="text-success">{fmt(r.completionTokens)}↓</span>
+                      {r.promptTokens || r.completionTokens ? (
+                        <>
+                          <span className="text-primary">{fmt(r.promptTokens)}↑</span>
+                          {" "}
+                          <span className="text-success">{fmt(r.completionTokens)}↓</span>
+                        </>
+                      ) : (
+                        <span className="text-text-muted text-[10px]">—</span>
+                      )}
                     </td>
                     <td className="py-1.5 text-right text-text-muted whitespace-nowrap"><TimeAgo timestamp={r.timestamp} /></td>
                   </tr>

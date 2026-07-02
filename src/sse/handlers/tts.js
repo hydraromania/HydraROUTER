@@ -10,6 +10,7 @@ import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { AI_PROVIDERS } from "@/shared/constants/providers";
 import { handleComboChat } from "open-sse/services/combo.js";
 import * as log from "../utils/logger.js";
+import { saveRequestUsage } from "@/lib/usageDb.js";
 
 // Derived from providers.js: any TTS provider not noAuth requires stored credentials
 const CREDENTIALED_PROVIDERS = new Set(
@@ -74,7 +75,15 @@ async function handleSingleModelTts(body, modelStr, responseFormat, language) {
   // noAuth providers — no credential needed
   if (!CREDENTIALED_PROVIDERS.has(provider)) {
     const result = await handleTtsCore({ provider, model, input: body.input, responseFormat, language });
-    if (result.success) return result.response;
+    if (result.success) {
+      saveRequestUsage({
+        provider, model,
+        endpoint: "/v1/audio/speech",
+        tokens: {},
+        status: "ok",
+      });
+      return result.response;
+    }
     return errorResponse(result.status || HTTP_STATUS.BAD_GATEWAY, result.error || "TTS failed");
   }
 
@@ -100,7 +109,16 @@ async function handleSingleModelTts(body, modelStr, responseFormat, language) {
 
     const result = await handleTtsCore({ provider, model, input: body.input, credentials, responseFormat, language });
 
-    if (result.success) return result.response;
+    if (result.success) {
+      saveRequestUsage({
+        provider, model,
+        connectionId: credentials.connectionId,
+        endpoint: "/v1/audio/speech",
+        tokens: {},
+        status: "ok",
+      });
+      return result.response;
+    }
 
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model);
     if (shouldFallback) {

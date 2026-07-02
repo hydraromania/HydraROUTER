@@ -146,9 +146,14 @@ if npm run build 2>&1 | tee -a "$LOG_FILE"; then
     cp -r /root/hydrarouter/node_modules/sql.js "$STANDALONE_NM/" 2>/dev/null && log "  ✅ sql.js copiat în standalone"
   fi
   # Copiază fișierele statice în standalone (necesare pentru 200 pe _next/static/*)
-  STANDALONE_STATIC="/root/hydrarouter/.next/standalone/.next/static"
-  if [ -d "/root/hydrarouter/.next/static" ] && [ ! -d "$STANDALONE_STATIC" ]; then
-    cp -r /root/hydrarouter/.next/static "$STANDALONE_STATIC" 2>/dev/null && log "  ✅ statice copiate în standalone"
+  # Next.js 16+ nu mai copiază automat .next/static/ în .next/standalone/.next/static/
+  if [ -d "/root/hydrarouter/.next/static" ]; then
+    mkdir -p "/root/hydrarouter/.next/standalone/.next/static"
+    cp -rf /root/hydrarouter/.next/static/* "/root/hydrarouter/.next/standalone/.next/static/" 2>/dev/null && log "  ✅ statice copiate în standalone"
+  fi
+  # Copiază directorul public/ în standalone (iconițe, favicon etc.)
+  if [ -d "/root/hydrarouter/public" ]; then
+    cp -rf /root/hydrarouter/public "/root/hydrarouter/.next/standalone/" 2>/dev/null && log "  ✅ public/ copiat în standalone"
   fi
 else
   log "❌ Build eșuat. HydraROUTER va rula cu versiunea anterioară."

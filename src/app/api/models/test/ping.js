@@ -55,12 +55,21 @@ export async function pingModelByKind(model, kind, baseUrl = `http://127.0.0.1:$
   const start = Date.now();
 
   if (kind === "embedding") {
-    const res = await fetch(`${baseUrl}/api/v1/embeddings`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ model, input: "test" }),
-      signal: AbortSignal.timeout(15000),
-    });
+    let res;
+    try {
+      res = await fetch(`${baseUrl}/api/v1/embeddings`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ model, input: "test" }),
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (err) {
+      const latencyMs = Date.now() - start;
+      const msg = err?.name === "TimeoutError" || /aborted.*timeout/i.test(err?.message || "")
+        ? "Timeout (15s) reaching provider"
+        : `Network error: ${err?.message || "unknown"}`;
+      return { ok: false, latencyMs, error: msg, status: 0 };
+    }
     const latencyMs = Date.now() - start;
     const rawText = await res.text().catch(() => "");
     let parsed = null;
@@ -78,12 +87,21 @@ export async function pingModelByKind(model, kind, baseUrl = `http://127.0.0.1:$
   }
 
   if (kind === "image") {
-    const res = await fetch(`${baseUrl}/api/v1/images/generations`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ model, prompt: "test" }),
-      signal: AbortSignal.timeout(15000),
-    });
+    let res;
+    try {
+      res = await fetch(`${baseUrl}/api/v1/images/generations`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ model, prompt: "test" }),
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (err) {
+      const latencyMs = Date.now() - start;
+      const msg = err?.name === "TimeoutError" || /aborted.*timeout/i.test(err?.message || "")
+        ? "Timeout (15s) reaching provider"
+        : `Network error: ${err?.message || "unknown"}`;
+      return { ok: false, latencyMs, error: msg, status: 0 };
+    }
     const latencyMs = Date.now() - start;
     const rawText = await res.text().catch(() => "");
     let parsed = null;
@@ -107,12 +125,21 @@ export async function pingModelByKind(model, kind, baseUrl = `http://127.0.0.1:$
     form.append("file", sampleAudio, "test.wav");
     form.append("model", model);
 
-    const res = await fetch(`${baseUrl}/api/v1/audio/transcriptions`, {
-      method: "POST",
-      headers: Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== "content-type")),
-      body: form,
-      signal: AbortSignal.timeout(15000),
-    });
+    let res;
+    try {
+      res = await fetch(`${baseUrl}/api/v1/audio/transcriptions`, {
+        method: "POST",
+        headers: Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== "content-type")),
+        body: form,
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (err) {
+      const latencyMs = Date.now() - start;
+      const msg = err?.name === "TimeoutError" || /aborted.*timeout/i.test(err?.message || "")
+        ? "Timeout (15s) reaching provider"
+        : `Network error: ${err?.message || "unknown"}`;
+      return { ok: false, latencyMs, error: msg, status: 0 };
+    }
     const latencyMs = Date.now() - start;
     const rawText = await res.text().catch(() => "");
     let parsed = null;
@@ -130,19 +157,28 @@ export async function pingModelByKind(model, kind, baseUrl = `http://127.0.0.1:$
     return { ok: true, latencyMs, error: null, status: res.status };
   }
 
-  const res = await fetch(`${baseUrl}/api/v1/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      // Claude-on-Copilot returns empty choices at max_tokens:1 (budget is spent
-      // before a content token emits), so a 1-token probe yields a false negative.
-      max_tokens: 16,
-      stream: false,
-      messages: [{ role: "user", content: "hi" }],
-    }),
-    signal: AbortSignal.timeout(15000),
-  });
+  let res;
+  try {
+    res = await fetch(`${baseUrl}/api/v1/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model,
+        // Claude-on-Copilot returns empty choices at max_tokens:1 (budget is spent
+        // before a content token emits), so a 1-token probe yields a false negative.
+        max_tokens: 16,
+        stream: false,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (err) {
+    const latencyMs = Date.now() - start;
+    const msg = err?.name === "TimeoutError" || /aborted.*timeout/i.test(err?.message || "")
+      ? "Timeout (15s) reaching provider"
+      : `Network error: ${err?.message || "unknown"}`;
+    return { ok: false, latencyMs, error: msg, status: 0 };
+  }
   const latencyMs = Date.now() - start;
 
   const rawText = await res.text().catch(() => "");
