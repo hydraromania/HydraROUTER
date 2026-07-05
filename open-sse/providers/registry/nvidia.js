@@ -20,54 +20,15 @@ export default {
     validateUrl: "https://integrate.api.nvidia.com/v1/models",
   },
   models: [
-    // ── Chat / LLM ──
-    {
-      id: "minimaxai/minimax-m2.7",
-      name: "Minimax M2.7",
-      defaults: { max_tokens: 16384, temperature: 1, top_p: 0.95, stream: true },
-    },
-    {
-      id: "minimaxai/minimax-m3",
-      name: "Minimax M3",
-      defaults: { max_tokens: 16384, temperature: 1, top_p: 0.95, stream: true },
-    },
-    {
-      id: "google/diffusiongemma-26b-a4b-it",
-      name: "DiffusionGemma 26B A4B IT",
-      defaults: { max_tokens: 4096, temperature: 1, top_p: 0.95, stream: true },
-    },
-    {
-      id: "moonshotai/kimi-k2.6",
-      name: "Kimi K2.6",
-      defaults: { max_tokens: 16384, temperature: 1, top_p: 1, stream: true },
-    },
-    {
-      id: "stepfun-ai/step-3.7-flash",
-      name: "Step 3.7 Flash",
-      defaults: { max_tokens: 16384, temperature: 1, top_p: 0.95, stream: true },
-    },
-    {
-      id: "deepseek-ai/deepseek-v4-pro",
-      name: "DeepSeek V4 Pro",
-      defaults: { max_tokens: 16384, temperature: 1, top_p: 0.95, stream: true },
-    },
-    {
-      id: "deepseek-ai/deepseek-v4-flash",
-      name: "DeepSeek V4 Flash",
-      defaults: { max_tokens: 16384, temperature: 1, top_p: 0.95, stream: true },
-    },
-    {
-      id: "mistralai/mistral-large-3-675b-instruct-2512",
-      name: "Mistral Large 3 (675B)",
-      defaults: { max_tokens: 7553, temperature: 0.15, top_p: 1, frequency_penalty: 0, presence_penalty: 0, stream: true },
-    },
-    { id: "z-ai/glm4.7", name: "GLM 4.7" },
-    { id: "z-ai/glm-5.2", name: "GLM 5.2", defaults: { max_tokens: 16384, temperature: 1, top_p: 1, seed: 42, stream: true, chat_template_kwargs: { enable_thinking: true, clear_thinking: false } } },
-    // ── Embedding ──
+    { id: "minimaxai/minimax-m2.7", name: "MiniMax M2.7" },
+    { id: "minimaxai/minimax-m3", name: "MiniMax M3" },
+    { id: "z-ai/glm-5.2", name: "GLM 5.2" },
+    { id: "deepseek-ai/deepseek-v4-pro", name: "DeepSeek V4 Pro" },
+    { id: "deepseek-ai/deepseek-v4-flash", name: "DeepSeek V4 Flash" },
+    { id: "moonshotai/kimi-k2.6", name: "Kimi K2.6" },
+    { id: "nvidia/nemotron-3-ultra-550b-a55b", name: "Nemotron 3 Ultra" },
     { id: "nvidia/nv-embedqa-e5-v5", name: "NV EmbedQA E5 v5", kind: "embedding" },
-    // ── STT ──
     { id: "nvidia/parakeet-ctc-1.1b-asr", name: "Parakeet CTC 1.1B", params: ["language"], kind: "stt" },
-    // ── TTS ──
     { id: "fastpitch", name: "FastPitch", kind: "tts" },
     { id: "tacotron2", name: "Tacotron2", kind: "tts" },
   ],
