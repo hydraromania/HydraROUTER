@@ -9,7 +9,7 @@ import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { AI_PROVIDERS } from "@/shared/constants/providers";
 import * as log from "../utils/logger.js";
-import { saveRequestUsage } from "@/lib/usageDb.js";
+import { saveRequestUsage, saveRequestDetail } from "@/lib/usageDb.js";
 
 // Providers requiring credentials for STT
 const CREDENTIALED_PROVIDERS = new Set(
@@ -56,6 +56,13 @@ export async function handleStt(request) {
         tokens: {},
         status: "ok",
       });
+      saveRequestDetail({
+        provider, model,
+        timestamp: new Date().toISOString(),
+        status: "success",
+        tokens: {},
+        endpoint: "/v1/audio/transcriptions",
+      }).catch(() => {});
       return result.response;
     }
     return errorResponse(result.status || HTTP_STATUS.BAD_GATEWAY, result.error || "STT failed");
@@ -91,6 +98,14 @@ export async function handleStt(request) {
         tokens: {},
         status: "ok",
       });
+      saveRequestDetail({
+        provider, model,
+        connectionId: credentials.connectionId,
+        timestamp: new Date().toISOString(),
+        status: "success",
+        tokens: {},
+        endpoint: "/v1/audio/transcriptions",
+      }).catch(() => {});
       return result.response;
     }
 

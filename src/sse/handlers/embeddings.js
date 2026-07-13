@@ -12,7 +12,7 @@ import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
-import { saveRequestUsage } from "@/lib/usageDb.js";
+import { saveRequestUsage, saveRequestDetail } from "@/lib/usageDb.js";
 
 /**
  * Handle embeddings request for the SSE/Next.js server.
@@ -134,6 +134,14 @@ export async function handleEmbeddings(request) {
         tokens: {},
         status: "ok",
       });
+      saveRequestDetail({
+        provider, model,
+        connectionId: credentials.connectionId,
+        timestamp: new Date().toISOString(),
+        status: "success",
+        tokens: {},
+        endpoint: "/v1/embeddings",
+      }).catch(() => {});
       return result.response;
     }
 

@@ -13,7 +13,7 @@ import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { handleComboChat } from "open-sse/services/combo.js";
 import * as log from "../utils/logger.js";
-import { saveRequestUsage } from "@/lib/usageDb.js";
+import { saveRequestUsage, saveRequestDetail } from "@/lib/usageDb.js";
 
 // Providers that don't require credentials (noAuth)
 const NO_AUTH_PROVIDERS = new Set(["sdwebui", "comfyui"]);
@@ -89,6 +89,13 @@ async function handleSingleModelImage(body, modelStr, { wantsStream, binaryOutpu
         tokens: {},
         status: "ok",
       });
+      saveRequestDetail({
+        provider, model,
+        timestamp: new Date().toISOString(),
+        status: "success",
+        tokens: {},
+        endpoint: "/v1/images/generations",
+      }).catch(() => {});
       return result.response;
     }
     return errorResponse(result.status || HTTP_STATUS.BAD_GATEWAY, result.error || "Image generation failed");
@@ -143,6 +150,14 @@ async function handleSingleModelImage(body, modelStr, { wantsStream, binaryOutpu
         tokens: {},
         status: "ok",
       });
+      saveRequestDetail({
+        provider, model,
+        connectionId: credentials.connectionId,
+        timestamp: new Date().toISOString(),
+        status: "success",
+        tokens: {},
+        endpoint: "/v1/images/generations",
+      }).catch(() => {});
       return result.response;
     }
 
