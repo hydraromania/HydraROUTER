@@ -52,6 +52,30 @@ describe("stripUnsupportedParams", () => {
 
     expect(body.max_tokens).toBe(64000);
   });
+
+  it("clamps NVIDIA glm-5.2 max_tokens to its 16384 ceiling", () => {
+    const body = { max_tokens: 100000 };
+
+    stripUnsupportedParams("nvidia", "z-ai/glm-5.2", body);
+
+    expect(body.max_tokens).toBe(16384);
+  });
+
+  it("clamps NVIDIA minimax-m3 / m2.7 max_tokens to their 8192 ceiling", () => {
+    for (const model of ["minimaxai/minimax-m3", "minimaxai/minimax-m2.7"]) {
+      const body = { max_tokens: 100000 };
+      stripUnsupportedParams("nvidia", model, body);
+      expect(body.max_tokens).toBe(8192);
+    }
+  });
+
+  it("does not shrink NVIDIA max_tokens when already within the ceiling", () => {
+    const body = { max_tokens: 4096 };
+
+    stripUnsupportedParams("nvidia", "z-ai/glm-5.2", body);
+
+    expect(body.max_tokens).toBe(4096);
+  });
 });
 
 describe("normalizeOpenAIParamNames", () => {

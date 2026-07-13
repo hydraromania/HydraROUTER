@@ -21,6 +21,10 @@ const STRIP_RULES = [
   // "integer above maximum value, expected <= 32768". Pin an explicit endpoint cap;
   // min() with the model ceiling still applies if a variant's own limit is lower.
   { provider: "volcengine-ark", match: /kimi/i, maxOutputCap: 32768, clampToModelMaxOutput: true },
+  // NVIDIA NIM enforces strict per-model max output ceilings and 400s when exceeded
+  // (e.g. glm-5.2 = 16384, minimax-m3/m2.7 = 8192). Clamp any over-large max_tokens
+  // to the model's configured maxOutput so the upstream request stays valid.
+  { provider: "nvidia", clampToModelMaxOutput: true },
 ];
 
 // Some clients (Anthropic↔OpenAI shims, certain SDKs, hand-rolled proxies)
