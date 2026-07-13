@@ -3,6 +3,7 @@ import { ensureToolCallIds, fixMissingToolResponses } from "./concerns/toolCall.
 import { prepareClaudeRequest } from "./formats/claude.js";
 import { cloakClaudeTools } from "../utils/claudeCloaking.js";
 import { filterToOpenAIFormat } from "./formats/openai.js";
+import { normalizeOpenAIParamNames } from "./concerns/paramSupport.js";
 import { normalizeThinkingConfig } from "../services/provider.js";
 import { applyThinking, captureThinking } from "./concerns/thinkingUnified.js";
 import { captureSessionId } from "../utils/sessionManager.js";
@@ -112,6 +113,9 @@ export function translateRequest(sourceFormat, targetFormat, model, body, stream
     result = filterToOpenAIFormat(result, {
       preserveCacheControl: !!PROVIDERS[provider]?.quirks?.preserveCacheControl,
     });
+    // Normalize camelCase OpenAI param aliases (e.g. `maxTokens`) to the
+    // snake_case form strict OpenAI-compatible endpoints (NVIDIA NIM) require.
+    normalizeOpenAIParamNames(result);
   }
 
   // Final step: prepare request for Claude format endpoints

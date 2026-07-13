@@ -23,6 +23,38 @@ const STRIP_RULES = [
   { provider: "volcengine-ark", match: /kimi/i, maxOutputCap: 32768, clampToModelMaxOutput: true },
 ];
 
+// Some clients (Anthropic↔OpenAI shims, certain SDKs, hand-rolled proxies)
+// emit camelCase OpenAI parameter names (e.g. `maxTokens`) that strict
+// OpenAI-compatible endpoints (NVIDIA NIM, etc.) reject with
+// 400 "Unsupported parameter(s): `maxTokens`". Normalize the known camelCase
+// → snake_case OpenAI Chat Completions parameter names in place so the upstream
+// request is valid. The snake_case key is the OpenAI standard, so:
+//   - if only the camelCase key is present, rename it to snake_case;
+//   - if both are present, the snake_case key wins and the camelCase alias is
+//     dropped (never duplicate / send an unknown param upstream).
+export const OPENAI_PARAM_RENAMES = {
+  maxTokens: "max_tokens",
+  maxCompletionTokens: "max_completion_tokens",
+  topP: "top_p",
+  topK: "top_k",
+  presencePenalty: "presence_penalty",
+  frequencyPenalty: "frequency_penalty",
+  logitBias: "logit_bias",
+  responseFormat: "response_format",
+  parallelToolCalls: "parallel_tool_calls",
+  toolChoice: "tool_choice",
+};
+
+export function normalizeOpenAIParamNames(body) {
+  if (!body || typeof body !== "object") return body;
+  for (const [camel, snake] of Object.entries(OPENAI_PARAM_RENAMES)) {
+    if (body[camel] === undefined) continue;
+    if (body[snake] === undefined) body[snake] = body[camel];
+    delete body[camel];
+  }
+  return body;
+}
+
 // Test a rule's match (regex or predicate) against the model id.
 function matches(rule, model) {
   if (!rule.match) return true;
