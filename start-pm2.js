@@ -47,11 +47,23 @@ http.createServer = (...args) => {
   return origCreate(...rest, wrapped);
 };
 
-// Load standalone server
+// Load standalone server (with retry if build is still in progress)
 const standaloneDir = path.join(PROJECT_ROOT, ".next", "standalone");
-try {
-  require(path.join(standaloneDir, "server.js"));
-} catch (err) {
-  console.error("[PM2] Failed to start server:", err);
-  process.exit(1);
+const serverJs = path.join(standaloneDir, "server.js");
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 2000;
+
+function loadServer(retriesLeft) {
+  try {
+    require(serverJs);
+  } catch (err) {
+    if (err.code === "MODULE_NOT_FOUND" && retriesLeft > 0) {
+      console.error(`[PM2] server.js not found — build in progress? Retrying in ${RETRY_DELAY_MS}ms (${retriesLeft} left)...`);
+      return setTimeout(() => loadServer(retriesLeft - 1), RETRY_DELAY_MS);
+    }
+    console.error("[PM2] Failed to start server:", err);
+    process.exit(1);
+  }
 }
+
+loadServer(MAX_RETRIES);
