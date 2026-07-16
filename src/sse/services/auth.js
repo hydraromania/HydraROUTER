@@ -225,16 +225,24 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   if (!shouldFallback) return { shouldFallback: false, cooldownMs: 0 };
 
   const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
-  const lockUpdate = buildModelLockUpdate(model, cooldownMs);
+  
+  const isGlobalError = !model || status === 401 || status === 402 || status === 403;
+  const resolvedModel = isGlobalError ? null : model;
+  const lockUpdate = buildModelLockUpdate(resolvedModel, cooldownMs);
 
-  await updateProviderConnection(connectionId, {
+  const updateFields = {
     ...lockUpdate,
-    testStatus: "unavailable",
     lastError: reason,
     errorCode: status,
     lastErrorAt: new Date().toISOString(),
     backoffLevel: newBackoffLevel ?? backoffLevel
-  });
+  };
+
+  if (isGlobalError) {
+    updateFields.testStatus = "unavailable";
+  }
+
+  await updateProviderConnection(connectionId, updateFields);
 
   const lockKey = Object.keys(lockUpdate)[0];
   const connName = conn?.displayName || conn?.name || conn?.email || connectionId.slice(0, 8);
