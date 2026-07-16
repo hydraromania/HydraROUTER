@@ -25,6 +25,7 @@ export default {
     { id: "z-ai/glm-5.2", name: "GLM 5.2" },
     { id: "deepseek-ai/deepseek-v4-pro", name: "DeepSeek V4 Pro" },
     { id: "deepseek-ai/deepseek-v4-flash", name: "DeepSeek V4 Flash" },
+    { id: "poolside/laguna-xs-2.1", name: "Poolside Laguna XS 2.1" },
     { id: "mistralai/mistral-large-3-675b-instruct-2512", name: "Mistral Large 3 675B Instruct 2512" },
     { id: "nvidia/nemotron-3-ultra-550b-a55b", name: "Nemotron 3 Ultra" },
     { id: "nvidia/nv-embedqa-e5-v5", name: "NV EmbedQA E5 v5", kind: "embedding" },

@@ -296,6 +296,12 @@ function applyFormat(fmt, body, cfg, caps) {
       if (level) body.reasoning_effort = level === "xhigh" || level === "max" ? "high" : level;
       break;
     }
+    case "poolside": {
+      body.chat_template_kwargs = {
+        enable_thinking: !(none && canDisable)
+      };
+      break;
+    }
     case "kiro":
       // Kiro thinking handled via system-tag injection in openai-to-kiro.js; no body field here.
       break;

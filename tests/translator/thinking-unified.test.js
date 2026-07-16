@@ -136,6 +136,13 @@ describe("applyThinking per provider format", () => {
     const out = apply("claude", "MiniMax-M3", { reasoning_effort: "high" }, "minimax");
     expect(out.thinking).toEqual({ type: "adaptive" });
   });
+  it("Poolside → chat_template_kwargs.enable_thinking", () => {
+    const outOn = apply("openai", "poolside/laguna-xs-2.1", { reasoning_effort: "high" }, "nvidia");
+    expect(outOn.chat_template_kwargs).toEqual({ enable_thinking: true });
+    
+    const outOff = apply("openai", "poolside/laguna-xs-2.1", { reasoning_effort: "none" }, "nvidia");
+    expect(outOff.chat_template_kwargs).toEqual({ enable_thinking: false });
+  });
   it("non-reasoning model → strips thinking", () => {
     const out = apply("openai", "gpt-4o", { reasoning_effort: "high" }, "openai");
     expect(out.reasoning_effort).toBeUndefined();
