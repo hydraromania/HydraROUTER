@@ -1,19 +1,16 @@
 {
   "name": "9router-app",
-  "version": "0.5.40",
+  "version": "0.5.35",
   "description": "9Router web dashboard",
   "private": true,
   "scripts": {
     "dev": "next dev --port 20127",
     "dev:webpack": "next dev --webpack --port 20127",
     "build": "next build --webpack",
-    "postbuild": "node scripts/copy-standalone-assets.mjs",
-    "build:bun": "bun --bun next build --webpack",
-    "postbuild:bun": "node scripts/copy-standalone-assets.mjs",
     "start": "next start --port 20127",
     "dev:bun": "bun --bun next dev --webpack --port 20127",
+    "build:bun": "bun --bun next build --webpack",
     "start:bun": "bun ./.next/standalone/server.js",
-    "deploy": "npm run build && (pm2 restart hydrarouter || true)",
     "cli:pack": "npm --prefix cli run pack:cli",
     "cli:publish": "npm --prefix cli run publish:cli"
   },

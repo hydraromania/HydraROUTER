@@ -67,7 +67,20 @@ const { ensureSqliteRuntime, buildEnvWithRuntime } = require("./hooks/sqliteRunt
 const { ensureTrayRuntime } = require("./hooks/trayRuntime");
 const args = process.argv.slice(2);
 
-// Self-heal SQLite runtime deps (sql.js + better-sqlite3) into ~/.hydrarouter/runtime
+// Subcommands (`9router xai video …`) run against an already-running gateway
+// and bypass the launcher flow (no runtime self-heal, no server spawn).
+if (args[0] === "xai" && args[1] === "video") {
+  const { run } = require("./src/cli/commands/xaiVideo");
+  run(args.slice(2))
+    .then((code) => process.exit(code))
+    .catch((err) => {
+      console.error(`❌ ${err?.message || err}`);
+      process.exit(1);
+    });
+  return;
+}
+
+// Self-heal SQLite runtime deps (sql.js + better-sqlite3) into ~/.9router/runtime
 // so the server can resolve them via NODE_PATH. Best-effort — sql.js is required,
 // better-sqlite3 is optional. Logs to stderr only on failure.
 try { ensureSqliteRuntime({ silent: true }); } catch {}
@@ -76,7 +89,7 @@ try { ensureSqliteRuntime({ silent: true }); } catch {}
 try { ensureTrayRuntime({ silent: true }); } catch {}
 
 // Configuration constants
-const APP_NAME = "hydrarouter";
+const APP_NAME = pkg.name; // Use from package.json
 const INSTALL_CMD_LATEST = `npm i -g ${APP_NAME}@latest --prefer-online`;
 
 const DEFAULT_PORT = 20128;
@@ -97,9 +110,9 @@ function getDisplayHost() {
   return host === DEFAULT_HOST ? "localhost" : host;
 }
 const MAX_PORT_ATTEMPTS = 10;
-// Identifiers for killAllAppProcesses - only kill hydrarouter specifically
+// Identifiers for killAllAppProcesses - only kill 9router specifically
 const PROCESS_IDENTIFIERS = [
-  'hydrarouter'  // Only package name - avoid killing other apps
+  '9router'  // Only package name - avoid killing other apps
 ];
 
 // Parse arguments
@@ -139,6 +152,11 @@ Options:
   --skip-update       Skip auto-update check
   -h, --help          Show this help message
   -v, --version       Show version
+
+Commands:
+  xai video --prompt "..." --output video.mp4
+                      Generate a Grok Imagine video via the running gateway
+                      (see: ${APP_NAME} xai video --help)
 `);
     process.exit(0);
   } else if (args[i] === "--version" || args[i] === "-v") {
@@ -170,8 +188,8 @@ function compareVersions(a, b) {
 // Get app data dir (matches app/src/lib/dataDir.js convention)
 function getAppDataDir() {
   return process.platform === "win32"
-    ? path.join(process.env.APPDATA || "", "hydrarouter")
-    : path.join(os.homedir(), ".hydrarouter");
+    ? path.join(process.env.APPDATA || "", "9router")
+    : path.join(os.homedir(), ".9router");
 }
 
 // Kill PID from file (best-effort, removes file after)
@@ -228,7 +246,7 @@ function killCloudflaredByAppPort(appPort) {
   return pids;
 }
 
-// Kill all hydrarouter processes
+// Kill all 9router processes
 function killAllAppProcesses(appPort) {
   return new Promise((resolve) => {
     try {
@@ -255,11 +273,11 @@ function killAllAppProcesses(appPort) {
           });
           const lines = output.split("\n").slice(1).filter(l => l.trim());
           lines.forEach(line => {
-            // Whitelist: real node process running hydrarouter/cli.js, or next-server.
-            // Avoids killing editors/grep/strace/cursor that just have "hydrarouter" in cmdline.
+            // Whitelist: real node process running 9router/cli.js, or next-server.
+            // Avoids killing editors/grep/strace/cursor that just have "9router" in cmdline.
             const cmd = line.toLowerCase();
             const isAppProcess =
-              (cmd.includes("node") && cmd.includes("hydrarouter") && (cmd.includes("cli.js") || cmd.includes("\\hydrarouter") || cmd.includes("/hydrarouter")))
+              (cmd.includes("node") && cmd.includes("9router") && (cmd.includes("cli.js") || cmd.includes("\\9router") || cmd.includes("/9router")))
               || cmd.includes("next-server");
             if (isAppProcess) {
               const match = line.match(/^"(\d+)"/);
@@ -281,11 +299,11 @@ function killAllAppProcesses(appPort) {
           const lines = output.split('\n');
 
           lines.forEach(line => {
-            // Whitelist: real node process running hydrarouter/cli.js, or next-server.
-            // Avoids killing grep/strace/editors/cursor that incidentally match "hydrarouter".
+            // Whitelist: real node process running 9router/cli.js, or next-server.
+            // Avoids killing grep/strace/editors/cursor that incidentally match "9router".
             const cmd = line.toLowerCase();
             const isAppProcess =
-              (cmd.includes("node") && cmd.includes("hydrarouter") && (cmd.includes("cli.js") || cmd.includes("/hydrarouter")))
+              (cmd.includes("node") && cmd.includes("9router") && (cmd.includes("cli.js") || cmd.includes("/9router")))
               || cmd.includes("next-server");
             if (isAppProcess) {
               const parts = line.trim().split(/\s+/);
@@ -820,7 +838,7 @@ function startServer(updatePromise) {
     if (restartCount >= MAX_RESTARTS) {
       console.error(`\n⚠️  Server crashed ${MAX_RESTARTS} times. Disabling MIT and restarting...`);
       try {
-        const dbPath = path.join(os.homedir(), process.platform === "win32" ? path.join("AppData", "Roaming", "hydrarouter", "db.json") : path.join(".hydrarouter", "db.json"));
+        const dbPath = path.join(os.homedir(), process.platform === "win32" ? path.join("AppData", "Roaming", "9router", "db.json") : path.join(".9router", "db.json"));
         if (fs.existsSync(dbPath)) {
           const db = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
           if (db.settings) db.settings.mitmEnabled = false;
