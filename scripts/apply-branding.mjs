@@ -87,7 +87,7 @@ const brandingReplacements = [
     rules: [
       { from: /Center 9Router node/g, to: 'Center HydraROUTER node' },
       { from: /alt="9Router"/g, to: 'alt="HydraROUTER"' },
-      { from: />9Router</g, to: '>HydraROUTER<' },
+      { from: /(>\s*)9Router(\s*<)/g, to: '$1HydraROUTER$2' },
     ]
   },
   // TokenSaverClient.js
