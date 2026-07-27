@@ -99,17 +99,15 @@ if git remote | grep -q upstream; then
       log "⚠️  Conflicte la merge. Încerc rezolvare automată..."
       CONFLICTS=$(git diff --name-only --diff-filter=U)
       for f in $CONFLICTS; do
-        if [[ "$f" == patches/* ]] || [[ "$f" == "restore-patches.sh" ]]; then
-          log "  Păstrez versiunea HydraROUTER pentru: $f"
-          git checkout --ours "$f"
-        else
-          log "  Păstrez versiunea upstream pentru: $f"
-          git checkout --theirs "$f"
-        fi
+        log "  Păstrez versiunea HydraROUTER pentru conflict la: $f"
+        git checkout --ours "$f"
         git add "$f"
       done
       git commit --no-edit 2>&1 | tee -a "$LOG_FILE" || true
     }
+
+    log "🎨 Aplicare branding HydraROUTER post-merge..."
+    node scripts/apply-branding.mjs 2>&1 | tee -a "$LOG_FILE" || log "⚠️  Branding script warning"
     
     # Reaplicare patch-uri
     if [ -f "restore-patches.sh" ]; then

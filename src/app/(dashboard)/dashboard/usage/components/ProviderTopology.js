@@ -94,7 +94,7 @@ ProviderNode.propTypes = {
   data: PropTypes.object.isRequired,
 };
 
-// Center 9Router node — pulse/glow on card only (no expanding rings)
+// Center HydraROUTER node — pulse/glow on card only (no expanding rings)
 function RouterNode({ data }) {
   const powering = (data.activeCount || 0) > 0;
   return (
@@ -112,7 +112,7 @@ function RouterNode({ data }) {
 
       <img
         src="/favicon.svg"
-        alt="9Router"
+        alt="HydraROUTER"
         className={`w-6 h-6 mr-2 ${powering ? "topology-router-icon" : ""}`}
         loading="lazy"
         decoding="async"
