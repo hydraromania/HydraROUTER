@@ -12,7 +12,6 @@ import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
-import { saveRequestUsage, saveRequestDetail } from "@/lib/usageDb.js";
 import { handleComboChat, getComboModelsFromData } from "open-sse/services/combo.js";
 import { assertPublicUrl } from "@/shared/utils/ssrfGuard.js";
 
@@ -147,19 +146,6 @@ async function handleSingleProviderFetch(body, providerInput, request, apiKey, s
       log
     });
     if (result.success) {
-      saveRequestUsage({
-        provider: providerId, model: providerId,
-        endpoint: "/v1/web/fetch",
-        tokens: {},
-        status: "ok",
-      });
-      saveRequestDetail({
-        provider: providerId, model: providerId,
-        timestamp: new Date().toISOString(),
-        status: "success",
-        tokens: {},
-        endpoint: "/v1/web/fetch",
-      }).catch(() => {});
       return new Response(JSON.stringify(result.data), {
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
       });
@@ -209,29 +195,11 @@ async function handleSingleProviderFetch(body, providerInput, request, apiKey, s
           providerSpecificData: newCreds.providerSpecificData,
           testStatus: "active"
         });
-      },
-      onRequestSuccess: async () => {
-        await clearAccountError(credentials.connectionId, credentials);
       }
     });
 
     if (result.success) {
-      saveRequestUsage({
-        provider: providerId, model: providerId,
-        connectionId: credentials.connectionId,
-        apiKey: apiKey || null,
-        endpoint: "/v1/web/fetch",
-        tokens: {},
-        status: "ok",
-      });
-      saveRequestDetail({
-        provider: providerId, model: providerId,
-        connectionId: credentials.connectionId,
-        timestamp: new Date().toISOString(),
-        status: "success",
-        tokens: {},
-        endpoint: "/v1/web/fetch",
-      }).catch(() => {});
+      await clearAccountError(credentials.connectionId, credentials);
       return new Response(JSON.stringify(result.data), {
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
       });
