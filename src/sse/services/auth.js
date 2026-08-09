@@ -8,6 +8,15 @@ import * as log from "../utils/logger.js";
 // Mutex to prevent race conditions during account selection
 let selectionMutex = Promise.resolve();
 
+const GITHUB_MONTHLY_USAGE_LIMIT = "you've reached your additional usage limit for your plan";
+
+function githubMonthlyResetMs(status, errorText, provider) {
+  if (resolveProviderId(provider) !== "github" || Number(status) !== 402) return null;
+  if (!String(errorText || "").toLowerCase().includes(GITHUB_MONTHLY_USAGE_LIMIT)) return null;
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+}
+
 /**
  * Get provider credentials from localDb
  * Filters out unavailable accounts and returns the selected account based on strategy
@@ -213,9 +222,16 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   const conn = connections.find(c => c.id === connectionId);
   const backoffLevel = conn?.backoffLevel || 0;
 
+  // GitHub premium-request exhaustion is account-wide until the next UTC month.
+  const githubResetAtMs = githubMonthlyResetMs(status, errorText, provider);
+
   // Provider-specific precise cooldown (e.g. codex usage_limit_reached resets_at) overrides backoff
   let shouldFallback, cooldownMs, newBackoffLevel;
-  if (resetsAtMs && resetsAtMs > Date.now()) {
+  if (githubResetAtMs) {
+    shouldFallback = true;
+    cooldownMs = githubResetAtMs - Date.now();
+    newBackoffLevel = 0;
+  } else if (resetsAtMs && resetsAtMs > Date.now()) {
     shouldFallback = true;
     cooldownMs = Math.min(resetsAtMs - Date.now(), MAX_RATE_LIMIT_COOLDOWN_MS);
     newBackoffLevel = 0;
@@ -225,24 +241,16 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   if (!shouldFallback) return { shouldFallback: false, cooldownMs: 0 };
 
   const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
-  
-  const isGlobalError = !model || status === 401 || status === 402 || status === 403;
-  const resolvedModel = isGlobalError ? null : model;
-  const lockUpdate = buildModelLockUpdate(resolvedModel, cooldownMs);
+  const lockUpdate = buildModelLockUpdate(githubResetAtMs ? null : model, cooldownMs);
 
-  const updateFields = {
+  await updateProviderConnection(connectionId, {
     ...lockUpdate,
+    testStatus: "unavailable",
     lastError: reason,
     errorCode: status,
     lastErrorAt: new Date().toISOString(),
     backoffLevel: newBackoffLevel ?? backoffLevel
-  };
-
-  if (isGlobalError) {
-    updateFields.testStatus = "unavailable";
-  }
-
-  await updateProviderConnection(connectionId, updateFields);
+  });
 
   const lockKey = Object.keys(lockUpdate)[0];
   const connName = conn?.displayName || conn?.name || conn?.email || connectionId.slice(0, 8);
