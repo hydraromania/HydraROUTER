@@ -154,6 +154,8 @@ async function hasValidApiKey(request) {
 async function canAccessPublicLlmApi(request) {
   if (isLocalRequest(request)) return true;
   if (await hasValidCliToken(request)) return true;
+  const settings = await loadSettings();
+  if (settings && settings.requireApiKey === false) return true;
   return await hasValidApiKey(request);
 }
 
@@ -199,6 +201,11 @@ export const __test__ = {
 };
 
 export async function proxy(request) {
+  // Allow CORS preflight requests
+  if (request.method === "OPTIONS") {
+    return NextResponse.next();
+  }
+
   const { pathname } = request.nextUrl;
 
   // Local-only gate for spawn-capable / host-secret routes.

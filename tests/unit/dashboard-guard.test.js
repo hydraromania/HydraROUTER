@@ -195,6 +195,27 @@ describe("dashboard guard public LLM API access", () => {
     expect(response).toBe(mocks.nextResponse);
     expect(mocks.validateApiKey).toHaveBeenCalledWith("sk-valid");
   });
+
+  it("allows CORS preflight OPTIONS request without API key", async () => {
+    const response = await proxy({
+      ...request("/v1/chat/completions", { host: "router.example.com" }),
+      method: "OPTIONS",
+    });
+
+    expect(response).toBe(mocks.nextResponse);
+    expect(mocks.validateApiKey).not.toHaveBeenCalled();
+  });
+
+  it("allows remote public LLM API without API key when requireApiKey is false", async () => {
+    mocks.getSettings.mockResolvedValue({ requireLogin: true, requireApiKey: false });
+
+    const response = await proxy(request("/v1/chat/completions", {
+      host: "router.example.com",
+    }));
+
+    expect(response).toBe(mocks.nextResponse);
+    expect(mocks.validateApiKey).not.toHaveBeenCalled();
+  });
 });
 
 describe("dashboard guard local-only access", () => {
