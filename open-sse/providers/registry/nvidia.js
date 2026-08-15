@@ -21,7 +21,7 @@ export default {
     baseUrl: "https://integrate.api.nvidia.com/v1/chat/completions",
     validateUrl: "https://integrate.api.nvidia.com/v1/models",
   },
-  models: [
+models: [
     { id: "minimaxai/minimax-m2.7", name: "MiniMax M2.7" },
     { id: "minimaxai/minimax-m3", name: "MiniMax M3" },
     { id: "z-ai/glm-5.2", name: "GLM 5.2" },
@@ -30,6 +30,8 @@ export default {
     { id: "poolside/laguna-xs-2.1", name: "Poolside Laguna XS 2.1" },
     { id: "mistralai/mistral-large-3-675b-instruct-2512", name: "Mistral Large 3 675B Instruct 2512" },
     { id: "nvidia/nemotron-3-ultra-550b-a55b", name: "Nemotron 3 Ultra" },
+    { id: "google/gemma-4-31b-it", name: "Gemma 4 31B IT", thinking: true },
+    { id: "stepfun-ai/step-3.7-flash", name: "Step 3.7 Flash", thinking: true },
     { id: "nvidia/nv-embedqa-e5-v5", name: "NV EmbedQA E5 v5", kind: "embedding" },
     { id: "nvidia/parakeet-ctc-1.1b-asr", name: "Parakeet CTC 1.1B", params: ["language"], kind: "stt" },
     { id: "fastpitch", name: "FastPitch", kind: "tts" },
