@@ -18,6 +18,35 @@ import {
 } from "../formats/gemini.js";
 import { deriveSessionId, toNumericSessionId } from "../../utils/sessionManager.js";
 import { ROLE, GEMINI_ROLE, OPENAI_BLOCK, CLAUDE_BLOCK } from "../schema/index.js";
+import { getCapabilitiesForModel } from "../../providers/capabilities.js";
+
+// Gemini 2.5+/3.x reject deprecated sampling params with
+// 400 "Request contains an invalid argument" — temperature must be 0 or 1,
+// and topP/topK are unsupported entirely. Determine per-model strictness from
+// capabilities (thinkingFormat) rather than hardcoding model ids:
+//   * gemini-level (Gemini 3.x)  → drop temperature/topP/topK (defaults are tuned)
+//   * gemini-budget (Gemini 2.5) → keep only temperature 0|1, drop topP/topK
+//   * anything else              → leave the params untouched
+function sanitizeGeminiSamplingParams(model, generationConfig) {
+  if (!generationConfig || typeof generationConfig !== "object") return;
+  const caps = getCapabilitiesForModel("gemini", model);
+  const fmt = caps?.thinkingFormat;
+  if (fmt === "gemini-level") {
+    delete generationConfig.temperature;
+    delete generationConfig.topP;
+    delete generationConfig.topK;
+    return;
+  }
+  if (fmt === "gemini-budget") {
+    delete generationConfig.topP;
+    delete generationConfig.topK;
+    const t = generationConfig.temperature;
+    if (t !== undefined && t !== 0 && t !== 1) {
+      // Gemini 2.5 accepts only 0 or 1 — clamp rather than drop so intent is preserved.
+      generationConfig.temperature = t < 0.5 ? 0 : 1;
+    }
+  }
+}
 
 // Sanitize function names for Gemini API.
 // Gemini requires: starts with [a-zA-Z_], followed by [a-zA-Z0-9_.:\-], max 64 chars.
@@ -67,6 +96,9 @@ function openaiToGeminiBase(model, body, stream, signature = DEFAULT_THINKING_AG
   if (body.max_tokens !== undefined) {
     result.generationConfig.maxOutputTokens = body.max_tokens;
   }
+
+  // Gemini 2.5+/3.x: drop deprecated temperature/topP/topK that cause HTTP 400.
+  sanitizeGeminiSamplingParams(model, result.generationConfig);
 
   // Build tool_call_id -> name map
   const tcID2Name = {};

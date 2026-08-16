@@ -34,12 +34,14 @@ export const UNSUPPORTED_SCHEMA_CONSTRAINTS = [
 ];
 
 // Default safety settings
+// NOTE: HARM_CATEGORY_CIVIC_INTEGRITY was removed from the Gemini API's
+// accepted enum (the category no longer exists upstream) — sending it makes
+// Gemini reject the request with 400 "Request contains an invalid argument".
 export const DEFAULT_SAFETY_SETTINGS = [
   { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "OFF" },
   { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "OFF" },
   { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "OFF" },
-  { category: "HARM_CATEGORY_HARASSMENT", threshold: "OFF" },
-  { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "OFF" }
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "OFF" }
 ];
 
 // Convert OpenAI content to Gemini parts

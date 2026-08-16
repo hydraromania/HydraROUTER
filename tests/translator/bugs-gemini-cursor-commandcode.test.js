@@ -78,6 +78,70 @@ describe("OpenAI → Gemini", () => {
   });
 });
 
+describe("OpenAI → Gemini sampling params (400 invalid argument)", () => {
+  // Gemini 2.5 (gemini-budget) rejects topP/topK entirely and only accepts
+  // temperature 0 or 1 — anything else → 400 "Request contains an invalid argument".
+  it("gemini 2.5: drops topP/topK and clamps temperature to 0|1", () => {
+    const out = translateRequest(FORMATS.OPENAI, FORMATS.GEMINI, "gemini-2.5-flash", {
+      temperature: 0.7,
+      top_p: 0.9,
+      top_k: 40,
+      messages: [{ role: "user", content: "hi" }],
+    }, true, null, "gemini");
+    expect(out.generationConfig.topP).toBeUndefined();
+    expect(out.generationConfig.topK).toBeUndefined();
+    expect(out.generationConfig.temperature).toBe(1);
+  });
+
+  it("gemini 2.5: keeps temperature 0 (deterministic) and drops topP/topK", () => {
+    const out = translateRequest(FORMATS.OPENAI, FORMATS.GEMINI, "gemini-2.5-flash", {
+      temperature: 0,
+      top_p: 0.9,
+      top_k: 40,
+      messages: [{ role: "user", content: "hi" }],
+    }, true, null, "gemini");
+    expect(out.generationConfig.topP).toBeUndefined();
+    expect(out.generationConfig.topK).toBeUndefined();
+    expect(out.generationConfig.temperature).toBe(0);
+  });
+
+  // Gemini 3.x (gemini-level) deprecates all sampling params — drop them so
+  // the model runs on its tuned defaults instead of a 400.
+  it("gemini 3.x: drops temperature/topP/topK entirely", () => {
+    const out = translateRequest(FORMATS.OPENAI, FORMATS.GEMINI, "gemini-3.7-flash", {
+      temperature: 0.7,
+      top_p: 0.9,
+      top_k: 40,
+      messages: [{ role: "user", content: "hi" }],
+    }, true, null, "gemini");
+    expect(out.generationConfig.temperature).toBeUndefined();
+    expect(out.generationConfig.topP).toBeUndefined();
+    expect(out.generationConfig.topK).toBeUndefined();
+  });
+
+  // Older Gemini models still accept sampling params — must not be touched.
+  it("gemini 2.0: keeps temperature/topP/topK untouched", () => {
+    const out = translateRequest(FORMATS.OPENAI, FORMATS.GEMINI, "gemini-2.0-flash", {
+      temperature: 0.7,
+      top_p: 0.9,
+      top_k: 40,
+      messages: [{ role: "user", content: "hi" }],
+    }, true, null, "gemini");
+    expect(out.generationConfig.temperature).toBe(0.7);
+    expect(out.generationConfig.topP).toBe(0.9);
+    expect(out.generationConfig.topK).toBe(40);
+  });
+
+  // HARM_CATEGORY_CIVIC_INTEGRITY was removed from the Gemini API enum —
+  // sending it → 400. The default safety settings must not include it.
+  it("default safety settings exclude removed CIVIC_INTEGRITY category", () => {
+    const out = O2G({ messages: [{ role: "user", content: "hi" }] });
+    const categories = out.safetySettings.map((s) => s.category);
+    expect(categories).not.toContain("HARM_CATEGORY_CIVIC_INTEGRITY");
+    expect(categories).toContain("HARM_CATEGORY_HATE_SPEECH");
+  });
+});
+
 describe("OpenAI → Cursor", () => {
   // openai-to-cursor.js:12-24 — image content fully dropped (text only)
   // KNOWN BUG
