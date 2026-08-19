@@ -17,6 +17,11 @@ export default {
   category: "freeTier",
   authType: "apikey",
   authModes: ["apikey", "apikey+model"],
+  // One API key unlocks every model on the same endpoint. When the requested
+  // model is blocked/rate-limited, the router keeps trying the provider's other
+  // LLM models on the same keys instead of burning every key on the blocked
+  // model (each connection only carries a per-model lock).
+  modelFallback: true,
   transport: {
     baseUrl: "https://integrate.api.nvidia.com/v1/chat/completions",
     validateUrl: "https://integrate.api.nvidia.com/v1/models",

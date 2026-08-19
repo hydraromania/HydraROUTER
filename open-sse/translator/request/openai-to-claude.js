@@ -26,10 +26,10 @@ export function openaiToClaudeRequest(model, body, stream) {
     stream: stream
   };
 
-  // Temperature
-  if (body.temperature !== undefined) {
-    result.temperature = body.temperature;
-  }
+  // Temperature: per 9router v0.5.35 — drop temperature for all Claude models.
+  // Claude models use adaptive thinking / output_config.effort instead of temperature.
+  // Passing temperature can interfere with thinking budgets and cause unexpected behavior.
+  // If explicitly requested via thinking override, applyThinking will handle it.
 
   // Messages
   result.messages = [];

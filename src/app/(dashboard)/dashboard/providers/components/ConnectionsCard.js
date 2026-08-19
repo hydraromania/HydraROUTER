@@ -30,7 +30,7 @@ function CooldownTimer({ until }) {
 CooldownTimer.propTypes = { until: PropTypes.string.isRequired };
 
 // ── ConnectionRow ──────────────────────────────────────────────
-function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onEdit, onDelete }) {
+function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onEdit, onDelete, isSelected, onSelectionChange }) {
   const [showProxyDropdown, setShowProxyDropdown] = useState(false);
   const [updatingProxy, setUpdatingProxy] = useState(false);
   const [isCooldown, setIsCooldown] = useState(false);
@@ -100,7 +100,7 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
   };
 
   return (
-    <div className={`group flex flex-col gap-3 p-2 rounded-lg sm:flex-row sm:items-center sm:justify-between hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors ${connection.isActive === false ? "opacity-60" : ""}`}>
+    <div className={`group flex flex-col gap-3 p-2 rounded-lg sm:flex-row sm:items-center sm:justify-between hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors ${connection.isActive === false ? "opacity-60" : ""} ${isSelected ? "ring-2 ring-primary/30 bg-primary/5" : ""}`}>
       <div className="flex w-full min-w-0 flex-1 items-start gap-3 sm:items-center">
         <div className="flex flex-col">
           <button onClick={onMoveUp} disabled={isFirst} className={`p-0.5 rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}>
@@ -110,6 +110,13 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
             <span className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
           </button>
         </div>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onSelectionChange(!isSelected)}
+          className="w-4 h-4 mt-1 rounded border-border text-primary focus:ring-primary"
+          aria-label={`Select ${displayName}`}
+        />
         <span className="material-symbols-outlined text-base text-text-muted">{isOAuth ? "lock" : "key"}</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{displayName}</p>
@@ -191,6 +198,8 @@ ConnectionRow.propTypes = {
   onUpdateProxy: PropTypes.func,
   onEdit: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
+  isSelected: PropTypes.bool.isRequired,
+  onSelectionChange: PropTypes.func.isRequired,
 };
 
 // ── AddApiKeyModal ─────────────────────────────────────────────
@@ -305,6 +314,8 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
   const [providerStrategy, setProviderStrategy] = useState(null);
   const [providerStickyLimit, setProviderStickyLimit] = useState("1");
   const [confirmState, setConfirmState] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const fetch_ = useCallback(async () => {
     try {
@@ -354,18 +365,15 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
     } catch { await fetch_(); }
   };
 
-  const handleDelete = async (id) => {
-    setConfirmState({
-      title: "Delete Connection",
-      message: "Delete this connection?",
-      onConfirm: async () => {
-        setConfirmState(null);
-        try {
-          const res = await fetch(`/api/providers/${id}`, { method: "DELETE" });
-          if (res.ok) setConnections((prev) => prev.filter((c) => c.id !== id));
-        } catch (e) { console.log("delete error:", e); }
-      }
-    });
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkDeleting(true);
+    try {
+      await Promise.all(selectedIds.map(id => fetch(`/api/providers/${id}`, { method: "DELETE" })));
+      setConnections(prev => prev.filter(c => !selectedIds.includes(c.id)));
+      setSelectedIds([]);
+    } catch (e) { console.log("bulk delete error:", e); }
+    finally { setBulkDeleting(false); }
   };
 
   const handleToggleActive = async (id, isActive) => {
@@ -434,6 +442,45 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
           </div>
         ) : (
           <>
+            {/* Bulk actions bar */}
+            {selectedIds.length > 0 && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <span className="text-sm font-medium text-amber-500">{selectedIds.length} selected</span>
+                <Button size="sm" variant="danger" icon="delete" onClick={handleBulkDelete} disabled={bulkDeleting}>
+                  {bulkDeleting ? "Deleting..." : "Delete Selected"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>Clear Selection</Button>
+              </div>
+            )}
+
+            <div className="flex flex-col divide-y divide-black/[0.03] dark:divide-white/[0.03]">
+              {/* Header row with select all */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3 px-2 text-xs text-text-muted">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === connections.length && connections.length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds(connections.map(c => c.id));
+                      } else {
+                        setSelectedIds([]);
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                    aria-label="Select all connections"
+                  />
+                  <span className="font-medium text-text-muted">Name</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-text-muted">Status</span>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto sm:justify-end">
+                  <span className="font-medium text-text-muted">Actions</span>
+                </div>
+              </div>
+            </div>
+
             <div className="flex flex-col divide-y divide-black/[0.03] dark:divide-white/[0.03]">
               {connections.map((conn, idx) => (
                 <ConnectionRow
@@ -449,6 +496,11 @@ export default function ConnectionsCard({ providerId, isOAuth }) {
                   onUpdateProxy={(poolId) => handleUpdateProxy(conn.id, poolId)}
                   onEdit={() => { setSelectedConnection(conn); setShowEditModal(true); }}
                   onDelete={() => handleDelete(conn.id)}
+                  isSelected={selectedIds.includes(conn.id)}
+                  onSelectionChange={(checked) => {
+                    if (checked) setSelectedIds(prev => [...prev, conn.id]);
+                    else setSelectedIds(prev => prev.filter(id => id !== conn.id));
+                  }}
                 />
               ))}
             </div>

@@ -122,6 +122,7 @@ let noBrowser = false;
 let skipUpdate = false;
 let showLog = false;
 let trayMode = false;
+let mcpMode = false;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--port" || args[i] === "-p") {
@@ -139,6 +140,8 @@ for (let i = 0; i < args.length; i++) {
   } else if (args[i] === "--tray" || args[i] === "-t") {
     trayMode = true;
     process.env.TRAY_MODE = "1";
+  } else if (args[i] === "--mcp") {
+    mcpMode = true;
   } else if (args[i] === "--help" || args[i] === "-h") {
     console.log(`
 Usage: ${APP_NAME} [options]
@@ -149,6 +152,7 @@ Options:
   -n, --no-browser    Don't open browser automatically
   -l, --log           Show server logs (default: hidden)
   -t, --tray          Run in system tray mode (background)
+  --mcp               Run MCP server on stdio (for AI agents)
   --skip-update       Skip auto-update check
   -h, --help          Show this help message
   -v, --version       Show version
@@ -169,6 +173,17 @@ Commands:
 if (skipUpdate && !trayMode && !process.stdin.isTTY) {
   trayMode = true;
   process.env.TRAY_MODE = "1";
+}
+
+// MCP stdio mode - runs MCP server on stdin/stdout, no HTTP server
+if (mcpMode) {
+  // Set up minimal env for MCP server
+  process.env.PORT = port.toString();
+  process.env.HOSTNAME = host;
+  // Load the standalone MCP server entry point
+  const mcpEntry = path.join(__dirname, "src", "cli", "mcp-stdio.js");
+  require(mcpEntry);
+  return;
 }
 
 // Always use Node.js runtime with absolute path

@@ -184,13 +184,18 @@ function openaiToGeminiBase(model, body, stream, signature = DEFAULT_THINKING_AG
             result.contents.push({ role: GEMINI_ROLE.MODEL, parts });
           }
 
-          // Check if there are actual tool responses in the next messages
-          const hasActualResponses = toolCallIds.some(fid => toolResponses[fid]);
+          // Check if there are actual tool responses in the next messages.
+          // Use key presence (not content truthiness): an EMPTY tool result
+          // (content "") must still be paired with its functionCall — dropping
+          // it makes Gemini re-issue the same functionCall on every turn, which
+          // the client answers with the same empty result → infinite loop of
+          // identical calls/responses (seen with Claude Code + gemini).
+          const hasActualResponses = toolCallIds.some(fid => Object.prototype.hasOwnProperty.call(toolResponses, fid));
 
           if (hasActualResponses) {
             const toolParts = [];
             for (const fid of toolCallIds) {
-              if (!toolResponses[fid]) continue;
+              if (!Object.prototype.hasOwnProperty.call(toolResponses, fid)) continue;
 
               let name = tcID2Name[fid];
               if (!name) {

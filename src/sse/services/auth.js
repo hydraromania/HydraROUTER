@@ -207,8 +207,9 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
 }
 
 /**
- * Mark account+model as unavailable — locks modelLock_${model} in DB.
- * All errors (429, 401, 5xx, etc.) lock per model, not per account.
+ * Mark account unavailable — locks modelLock_${model} in DB.
+ * - 401/403 (bad key) → account-wide lock `modelLock___all` (key is dead for every model).
+ * - everything else (429, 404, 5xx, …) → per-model lock; other models stay usable on the key.
  * @param {string} connectionId
  * @param {number} status - HTTP status code from upstream
  * @param {string} errorText
@@ -241,11 +242,18 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   if (!shouldFallback) return { shouldFallback: false, cooldownMs: 0 };
 
   const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
-  const lockUpdate = buildModelLockUpdate(githubResetAtMs ? null : model, cooldownMs);
+
+  // Auth/permission failures (401/403) or errors without a model context mean
+  // the whole connection must cool down, not just one model. Otherwise the
+  // fallback loop burns every model on a dead key (and clients retry the same
+  // request against the same dead key forever). Everything else (429 quota, 404
+  // model not found, 5xx, …) is model-scoped: other models stay usable on the key.
+  const isAccountWide = status === 401 || status === 403 || !model || !!githubResetAtMs;
+  const lockUpdate = buildModelLockUpdate(isAccountWide ? null : model, cooldownMs);
 
   await updateProviderConnection(connectionId, {
     ...lockUpdate,
-    testStatus: "unavailable",
+    testStatus: isAccountWide ? "unavailable" : "active",
     lastError: reason,
     errorCode: status,
     lastErrorAt: new Date().toISOString(),
