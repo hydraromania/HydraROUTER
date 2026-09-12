@@ -7,7 +7,7 @@ import {
   isModelAllowedForApiKey,
 } from "../services/auth.js";
 import { getSettings } from "@/lib/localDb";
-import { getModelInfo } from "../services/model.js";
+import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleEmbeddingsCore } from "open-sse/handlers/embeddingsCore.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -82,6 +82,13 @@ export async function handleEmbeddings(request) {
   if (!body.input) {
     log.warn("EMBEDDINGS", "Missing input");
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing required field: input");
+  }
+
+  // Check if this is a combo (e.g. "Memory")
+  const comboModels = await getComboModels(modelStr);
+  if (comboModels) {
+    log.info("COMBO", `Embedding combo "${modelStr}" → ${comboModels.length} models`);
+    return handleEmbeddingCombo({ body, comboModels, apiKey, url, settings, log });
   }
 
   const modelInfo = await getModelInfo(modelStr);
@@ -195,4 +202,120 @@ export async function handleEmbeddings(request) {
 
     return result.response;
   }
+}
+
+/**
+ * Handle embedding combo with fallback across models.
+ * Tries each model in order; on failure, falls through to the next.
+ */
+async function handleEmbeddingCombo({ body, comboModels, apiKey, url, settings, log }) {
+  let lastError = null;
+  let lastStatus = null;
+
+  for (let i = 0; i < comboModels.length; i++) {
+    const modelStr = comboModels[i];
+    log.info("COMBO", `Embedding model ${i + 1}/${comboModels.length}: ${modelStr}`);
+
+    const modelInfo = await getModelInfo(modelStr);
+    if (!modelInfo.provider) {
+      log.warn("COMBO", `Skipping invalid model: ${modelStr}`);
+      continue;
+    }
+
+    const { provider, model } = modelInfo;
+
+    // Credential + fallback loop for this model
+    const excludeConnectionIds = new Set();
+
+    while (true) {
+      const credentials = await getProviderCredentials(provider, excludeConnectionIds, model);
+
+      if (!credentials || credentials.allRateLimited) {
+        if (credentials?.allRateLimited) {
+          lastError = credentials.lastError || "Unavailable";
+          lastStatus = Number(credentials.lastErrorCode) || HTTP_STATUS.SERVICE_UNAVAILABLE;
+          log.warn("COMBO", `[${provider}/${model}] ${lastError}`);
+        } else if (excludeConnectionIds.size === 0) {
+          lastError = `No credentials for ${provider}`;
+          lastStatus = HTTP_STATUS.BAD_REQUEST;
+          log.warn("COMBO", lastError);
+        } else {
+          lastError = "All accounts unavailable";
+          lastStatus = HTTP_STATUS.SERVICE_UNAVAILABLE;
+          log.warn("COMBO", lastError);
+        }
+        break; // try next model in combo
+      }
+
+      log.info("AUTH", `\x1b[32mUsing ${provider} account: ${credentials.connectionName}\x1b[0m`);
+
+      const refreshedCredentials = await checkAndRefreshToken(provider, credentials);
+
+      const liveReqId = trackRequestStart({
+        model,
+        provider,
+        type: "embeddings",
+        endpoint: url.pathname,
+        apiKey,
+        connectionId: credentials.connectionId,
+        accountName: credentials.connectionName,
+      });
+
+      const result = await handleEmbeddingsCore({
+        body: { ...body, model: `${provider}/${model}` },
+        modelInfo: { provider, model },
+        credentials: refreshedCredentials,
+        log,
+        onCredentialsRefreshed: async (newCreds) => {
+          await updateProviderCredentials(credentials.connectionId, {
+            ...newCreds,
+            existingProviderSpecificData: credentials.providerSpecificData,
+            testStatus: "active"
+          });
+        },
+        onRequestSuccess: async () => {
+          await clearAccountError(credentials.connectionId, credentials, model);
+        }
+      });
+
+      if (result.success) {
+        const usage = exactEmbeddingUsage(result.usage);
+        trackRequestEnd(liveReqId, { tokens: usage, statusCode: 200, status: "completed" });
+        if (usage) {
+          saveRequestUsage({
+            provider,
+            model,
+            connectionId: credentials.connectionId,
+            apiKey,
+            endpoint: url.pathname,
+            tokens: usage,
+            status: "success",
+          }).catch(() => {});
+        }
+        log.info("COMBO", `Embedding combo succeeded with ${provider}/${model}`);
+        return result.response;
+      }
+
+      trackRequestError(liveReqId, { error: result.error, statusCode: result.status });
+
+      const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model);
+
+      if (shouldFallback) {
+        log.warn("COMBO", `Account ${credentials.connectionName} unavailable (${result.status}), trying fallback`);
+        excludeConnectionIds.add(credentials.connectionId);
+        lastError = result.error;
+        lastStatus = result.status;
+        continue;
+      }
+
+      // Non-fallbackable error — try next model in combo
+      lastError = result.error;
+      lastStatus = result.status;
+      break;
+    }
+  }
+
+  // All models failed
+  log.warn("COMBO", `All embedding combo models failed: ${lastError}`);
+  return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All combo models unavailable");
 }
