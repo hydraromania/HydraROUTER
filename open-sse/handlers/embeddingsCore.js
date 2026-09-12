@@ -32,6 +32,7 @@ export async function handleEmbeddingsCore({
   log,
   onCredentialsRefreshed,
   onRequestSuccess,
+  proxyOptions,
 }) {
   const { provider, model } = modelInfo;
 
@@ -87,14 +88,14 @@ export async function handleEmbeddingsCore({
 
   let providerResponse;
   try {
-    providerResponse = await fetch(url, {
+    providerResponse = await proxyAwareFetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify(requestBody),
       ...(typeof AbortSignal?.timeout === "function"
         ? { signal: AbortSignal.timeout(FETCH_CONNECT_TIMEOUT_MS) }
         : {}),
-    });
+    }, proxyOptions);
   } catch (error) {
     const errMsg = formatProviderError(error, provider, model, HTTP_STATUS.BAD_GATEWAY);
     log?.debug?.("EMBEDDINGS", `Fetch error: ${errMsg}`);
@@ -122,11 +123,11 @@ export async function handleEmbeddingsCore({
       try {
         const retryHeaders = adapter.buildHeaders(credentials, ctx);
         const retryUrl = adapter.buildUrl(model, credentials, ctx);
-        providerResponse = await fetch(retryUrl, {
+        providerResponse = await proxyAwareFetch(retryUrl, {
           method: "POST",
           headers: retryHeaders,
           body: JSON.stringify(requestBody),
-        });
+        }, proxyOptions);
       } catch {
         log?.warn?.("TOKEN", `${provider.toUpperCase()} | retry after refresh failed`);
       }

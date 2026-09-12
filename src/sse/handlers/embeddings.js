@@ -159,6 +159,12 @@ export async function handleEmbeddings(request) {
       modelInfo: { provider, model },
       credentials: refreshedCredentials,
       log,
+      proxyOptions: {
+        connectionProxyEnabled: credentials?.providerSpecificData?.connectionProxyEnabled === true,
+        connectionProxyUrl: credentials?.providerSpecificData?.connectionProxyUrl || "",
+        connectionNoProxy: credentials?.providerSpecificData?.connectionNoProxy || "",
+        vercelRelayUrl: credentials?.providerSpecificData?.vercelRelayUrl || "",
+      },
       onCredentialsRefreshed: async (newCreds) => {
         await updateProviderCredentials(credentials.connectionId, {
           ...newCreds,
@@ -266,6 +272,12 @@ async function handleEmbeddingCombo({ body, comboModels, apiKey, url, settings, 
         modelInfo: { provider, model },
         credentials: refreshedCredentials,
         log,
+        proxyOptions: {
+          connectionProxyEnabled: credentials?.providerSpecificData?.connectionProxyEnabled === true,
+          connectionProxyUrl: credentials?.providerSpecificData?.connectionProxyUrl || "",
+          connectionNoProxy: credentials?.providerSpecificData?.connectionNoProxy || "",
+          vercelRelayUrl: credentials?.providerSpecificData?.vercelRelayUrl || "",
+        },
         onCredentialsRefreshed: async (newCreds) => {
           await updateProviderCredentials(credentials.connectionId, {
             ...newCreds,
