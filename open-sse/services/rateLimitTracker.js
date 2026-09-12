@@ -49,7 +49,7 @@ class RateLimitTracker {
       const limits = getModelRateLimits(providerId, modelId);
       const now = Date.now();
       const rpdReset = getRpdResetTime(limits.rpdResetHour, limits.resetTz);
-      const rpdResetAt = rpdReset.getTime();
+      let rpdResetAt = rpdReset.getTime();
 
       let rpdCount = 0;
       let rpmCount = 0;
