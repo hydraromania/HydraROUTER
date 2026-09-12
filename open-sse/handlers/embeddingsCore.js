@@ -5,6 +5,21 @@ import { refreshWithRetry } from "../services/tokenRefresh.js";
 import { getEmbeddingAdapter } from "./embeddingProviders/index.js";
 
 /**
+ * Look up the native dimensions of an embedding model from the provider registry.
+ * Returns null when the model or its dimensions metadata is not found.
+ */
+function getModelNativeDimensions(provider, model) {
+  try {
+    const { PROVIDER_MODELS } = require("open-sse/providers/index.js");
+    const alias = provider;
+    const models = PROVIDER_MODELS[alias];
+    if (!Array.isArray(models)) return null;
+    const entry = models.find(m => m.id === model);
+    return entry?.dimensions ?? null;
+  } catch { return null; }
+}
+
+/**
  * Core embeddings handler — orchestrator only. Provider-specific URL/headers/body/normalize
  * live in `./embeddingProviders/{id}.js`.
  *
@@ -38,9 +53,20 @@ export async function handleEmbeddingsCore({
   }
 
   const ctx = { input };
+  // Auto-correct requested dimensions to the model's native dimension when
+  // the client asks for a dimension the model doesn't support (e.g. 8888 → 2048).
+  // This prevents 400 errors from upstream providers while still producing valid embeddings.
+  let requestedDimensions = body.dimensions;
+  if (requestedDimensions != null) {
+    const nativeDims = getModelNativeDimensions(provider, model);
+    if (nativeDims && Number(requestedDimensions) !== nativeDims) {
+      log?.info?.("EMBEDDINGS", `Dimension auto-correct: ${requestedDimensions} → ${nativeDims} (model ${provider}/${model} native)`);
+      requestedDimensions = nativeDims;
+    }
+  }
   // buildUrl/buildHeaders/buildBody were called bare. An adapter that rejects a
   // misconfigured connection — selfhosted-embedding throws when no baseUrl is set
-  // rather than silently falling back to api.openai.com — would have escaped this
+  // instead of silently falling back to api.openai.com — would have escaped this
   // function uncaught, surfacing as a 500 or a request that never settles. A
   // configuration mistake is a 400 with the reason in it.
   let url, headers, requestBody;
@@ -50,7 +76,7 @@ export async function handleEmbeddingsCore({
     requestBody = adapter.buildBody(model, {
       input,
       encoding_format: body.encoding_format || "float",
-      dimensions: body.dimensions,
+      dimensions: requestedDimensions,
     });
   } catch (error) {
     log?.debug?.("EMBEDDINGS", `Request build failed: ${error.message}`);
