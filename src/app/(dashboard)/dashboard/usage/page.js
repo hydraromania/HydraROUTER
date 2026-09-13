@@ -54,7 +54,7 @@ function UsageContent() {
             { value: "overview", label: "Overview" },
             { value: "analytics", label: "Analytics & Comparison" },
             { value: "live", label: "Real-Time / Live" },
-            { value: "errorAnalysis", label: "Error Analysis (429/410)" },
+            { value: "errorAnalysis", label: "Error Analysis (400/429/410)" },
             { value: "comboStats", label: "Combo Stats" },
             { value: "console", label: "Console Log" },
             { value: "animation", label: "Console Animation" },

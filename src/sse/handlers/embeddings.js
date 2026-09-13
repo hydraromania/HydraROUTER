@@ -257,6 +257,16 @@ async function handleEmbeddingCombo({ body, comboModels, apiKey, url, settings, 
 
       const refreshedCredentials = await checkAndRefreshToken(provider, credentials);
 
+      const poolId = credentials?.providerSpecificData?.connectionProxyPoolId || null;
+      const isAutoProxy = credentials?.providerSpecificData?.proxyPoolAuto || false;
+      const activeProxyUrl = credentials?.providerSpecificData?.vercelRelayUrl || (credentials?.providerSpecificData?.connectionProxyEnabled ? credentials?.providerSpecificData?.connectionProxyUrl : "");
+      const proxyTracking = activeProxyUrl ? {
+        url: activeProxyUrl,
+        poolId,
+        type: credentials?.providerSpecificData?.vercelRelayUrl ? "relay" : "proxy",
+        isAuto: isAutoProxy,
+      } : null;
+
       const liveReqId = trackRequestStart({
         model,
         provider,
@@ -265,6 +275,7 @@ async function handleEmbeddingCombo({ body, comboModels, apiKey, url, settings, 
         apiKey,
         connectionId: credentials.connectionId,
         accountName: credentials.connectionName,
+        proxy: proxyTracking,
       });
 
       const result = await handleEmbeddingsCore({

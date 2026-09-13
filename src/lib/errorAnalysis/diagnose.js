@@ -5,6 +5,7 @@
 export function diagnoseErrors(logs = []) {
   const summary = {
     totalErrors: 0,
+    total400: 0,
     total429: 0,
     total410: 0,
     byProvider: {},
@@ -18,6 +19,7 @@ export function diagnoseErrors(logs = []) {
     summary.totalErrors++;
 
     const status = Number(item.statusCode) || 0;
+    if (status === 400) summary.total400++;
     if (status === 429) summary.total429++;
     if (status === 410) summary.total410++;
 
@@ -134,6 +136,82 @@ export function diagnoseErrors(logs = []) {
       const entry = patternMap.get(key);
       entry.count++;
       if (entry.samples.length < 3) entry.samples.push(item.error || "Tools unsupported");
+    }
+
+    // Pattern E: Context Length Exceeded (400 Bad Request)
+    if (
+      status === 400 &&
+      (errorStr.includes("context_length_exceeded") ||
+        errorStr.includes("maximum context length") ||
+        errorStr.includes("context window") ||
+        errorStr.includes("too many tokens") ||
+        errorStr.includes("prompt is too long") ||
+        errorStr.includes("max_tokens") ||
+        errorStr.includes("token limit"))
+    ) {
+      const key = `context_length_exceeded:${provider}:${model}`;
+      if (!patternMap.has(key)) {
+        patternMap.set(key, {
+          id: key,
+          type: "context_length_exceeded",
+          severity: "high",
+          provider,
+          model,
+          count: 0,
+          title: `Lungime context depășită (400 Context Length Exceeded) pe ${provider}`,
+          description: `Cererea depășește numărul maxim de tokeni admiși de ${model} (${provider}). Se recomandă activarea compresiei RTK sau trunchierea istoricului de mesaje.`,
+          recommendation: {
+            action: "enable_rtk",
+            label: "Activează RTK (Token Compression) & Truncation",
+            provider,
+            model,
+          },
+          samples: [],
+        });
+      }
+      const entry = patternMap.get(key);
+      entry.count++;
+      if (entry.samples.length < 3) entry.samples.push(item.error || "Context length exceeded");
+    }
+
+    // Pattern F: Invalid Parameters or Malformed Payload (400 Bad Request)
+    if (
+      status === 400 &&
+      !patternMap.has(`thinking_unsupported:${provider}:${model}`) &&
+      !patternMap.has(`tools_unsupported:${provider}:${model}`) &&
+      !patternMap.has(`context_length_exceeded:${provider}:${model}`) &&
+      (errorStr.includes("invalid_request_error") ||
+        errorStr.includes("invalid parameter") ||
+        errorStr.includes("extra_forbidden") ||
+        errorStr.includes("unknown parameter") ||
+        errorStr.includes("validation error") ||
+        errorStr.includes("unrecognized request argument") ||
+        errorStr.includes("bad request") ||
+        status === 400)
+    ) {
+      const key = `bad_request:${provider}:${model}`;
+      if (!patternMap.has(key)) {
+        patternMap.set(key, {
+          id: key,
+          type: "bad_request",
+          severity: "medium",
+          provider,
+          model,
+          count: 0,
+          title: `Eroare cerere invalidă / incompatibilitate parametri (400) pe ${provider}`,
+          description: `Upstream-ul ${provider} a returnat HTTP 400 pentru modelul ${model}. Verificați dacă payload-ul sau parametrii specifici (ex. temperature, top_p, schema) sunt compatibili.`,
+          recommendation: {
+            action: "inspect_request",
+            label: "Inspectează payload-ul în Request Details și normalizează parametrii",
+            provider,
+            model,
+          },
+          samples: [],
+        });
+      }
+      const entry = patternMap.get(key);
+      entry.count++;
+      if (entry.samples.length < 3) entry.samples.push(item.error || "400 Bad Request");
     }
   }
 

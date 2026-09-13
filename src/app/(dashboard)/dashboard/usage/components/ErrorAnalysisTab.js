@@ -33,13 +33,25 @@ export default function ErrorAnalysisTab() {
     setAppliedActions((prev) => ({ ...prev, [patternId]: true }));
   };
 
-  const summary = data?.summary || { totalErrors: 0, total429: 0, total410: 0, byProvider: {}, byModel: {} };
+  const summary = data?.summary || { totalErrors: 0, total400: 0, total429: 0, total410: 0, byProvider: {}, byModel: {} };
   const patterns = data?.patterns || [];
 
   return (
     <div className="space-y-4">
       {/* Top summary cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <Card className="p-3.5 border-border-subtle bg-surface">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+            Erori 400 (Bad Request)
+          </div>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-2xl font-bold font-mono text-purple-400">
+              {summary.total400 || 0}
+            </span>
+            <span className="text-xs text-text-muted">cereri invalide</span>
+          </div>
+        </Card>
+
         <Card className="p-3.5 border-border-subtle bg-surface">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
             Erori 429 (Rate Limit)
@@ -85,7 +97,7 @@ export default function ErrorAnalysisTab() {
               Tipare de Eșec Repetitive & Recomandări Automate
             </h3>
             <p className="text-[11px] text-text-muted">
-              Analiză automată a incompatibilităților de unelte (tools), bugete de gândire (thinking) și epuizare de cotă.
+              Analiză automată a erorilor 400 (context limit, parametri, incompatibilități tools/thinking), limitelor 429 și modelelor retrase 410.
             </p>
           </div>
           <Button
@@ -105,7 +117,7 @@ export default function ErrorAnalysisTab() {
         <div className="p-3.5 divide-y divide-border">
           {patterns.length === 0 ? (
             <div className="py-8 text-center text-text-muted text-xs">
-              Nu au fost detectate tipare repetitive de eroare 429 sau 410 în sesiunile recente.
+              Nu au fost detectate tipare repetitive de eroare 400, 429 sau 410 în sesiunile recente.
             </div>
           ) : (
             patterns.map((pat) => (

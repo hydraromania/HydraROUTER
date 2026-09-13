@@ -29,6 +29,16 @@ function findModel(models, modelId, aliasOrId) {
   if (!models) return undefined;
   const found = models.find(m => m.id === modelId);
   if (found) return found;
+  if (aliasOrId === "nvidia") {
+    const byUpstream = models.find(m => m.upstreamModelId === modelId);
+    if (byUpstream) return byUpstream;
+    if (typeof modelId === "string") {
+      const slash = modelId.indexOf("/");
+      const base = slash !== -1 ? modelId.slice(slash + 1) : modelId;
+      const byBase = models.find(m => m.id === base || m.upstreamModelId === base || m.id.endsWith(`/${base}`));
+      if (byBase) return byBase;
+    }
+  }
   if (!DOT_VERSION_PROVIDERS.has(aliasOrId)) return undefined;
   const normalized = normalizeModelId(modelId);
   if (normalized === modelId) return undefined;

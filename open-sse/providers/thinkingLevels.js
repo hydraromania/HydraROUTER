@@ -40,6 +40,10 @@ const PATTERN_THINKING = [
   { provider: "codex", pattern: "*gpt-5.6-luna*", levels: CODEX_GPT_5_6_LEVELS },
   { pattern: "*codex*", levels: ["low", "medium", "high", "xhigh"] }, // codex cannot disable thinking
   { provider: "nvidia", pattern: "*kimi-k3*", levels: ["low", "high", "max"] },
+  { provider: "nvidia", pattern: "*deepseek*", levels: ["none", "low", "high", "max"] },
+  { provider: "nvidia", pattern: "*nemotron*", levels: ["none", "low", "medium", "high", "max"] },
+  { provider: "nvidia", pattern: "*gemma*", levels: ["none", "high"] },
+  { provider: "nvidia", pattern: "*laguna*", levels: ["none", "low", "medium", "high"] },
   // codebuddy-cn per-model effort sets — read off the client picker (server-
   // delivered supportedEfforts), 2026-08-30. Gateway uses thinkingFormat "openai"
   // but rejects levels outside each model's set.
