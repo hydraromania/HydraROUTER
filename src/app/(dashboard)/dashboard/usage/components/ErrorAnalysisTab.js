@@ -9,6 +9,8 @@ export default function ErrorAnalysisTab() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [appliedActions, setAppliedActions] = useState({});
+  const [applyingId, setApplyingId] = useState(null);
+  const [applyMsg, setApplyMsg] = useState("");
 
   const fetchData = async () => {
     setLoading(true);
@@ -17,6 +19,11 @@ export default function ErrorAnalysisTab() {
       if (res.ok) {
         const json = await res.json();
         setData(json);
+        const applied = {};
+        for (const pat of json.patterns || []) {
+          if (pat.applied) applied[pat.id] = true;
+        }
+        setAppliedActions(applied);
       }
     } catch (e) {
       console.error("Failed to load error analysis:", e);
@@ -26,11 +33,42 @@ export default function ErrorAnalysisTab() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load on mount
     fetchData();
   }, []);
 
-  const handleApply = (patternId) => {
-    setAppliedActions((prev) => ({ ...prev, [patternId]: true }));
+  const handleApply = async (pat) => {
+    const patternId = pat.id;
+    if (appliedActions[patternId] || applyingId) return;
+    const fallbackByType = {
+      rate_limit: "enable_pacing",
+      model_gone: "replace_model",
+      thinking_unsupported: "disable_thinking",
+      tools_unsupported: "drop_tools",
+      context_length_exceeded: "enable_rtk",
+      bad_request: "inspect_request",
+    };
+    const action = pat.recommendation?.action || fallbackByType[pat.type];
+    if (!action) return;
+    setApplyingId(patternId);
+    setApplyMsg("");
+    try {
+      const res = await fetch("/api/usage/error-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, provider: pat.provider, model: pat.model, patternId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Aplicarea a esuat");
+      if (action !== "inspect_request") {
+        setAppliedActions((prev) => ({ ...prev, [patternId]: true }));
+      }
+      setApplyMsg(json.message || "Recomandare aplicata.");
+    } catch (e) {
+      setApplyMsg(e.message || "Aplicarea a esuat.");
+    } finally {
+      setApplyingId(null);
+    }
   };
 
   const summary = data?.summary || { totalErrors: 0, total400: 0, total429: 0, total410: 0, byProvider: {}, byModel: {} };
@@ -115,6 +153,11 @@ export default function ErrorAnalysisTab() {
         </div>
 
         <div className="p-3.5 divide-y divide-border">
+          {applyMsg && (
+            <div className="pb-3 text-xs text-text-main bg-primary/10 border border-primary/20 rounded px-2.5 py-2">
+              {applyMsg}
+            </div>
+          )}
           {patterns.length === 0 ? (
             <div className="py-8 text-center text-text-muted text-xs">
               Nu au fost detectate tipare repetitive de eroare 400, 429 sau 410 în sesiunile recente.
@@ -153,8 +196,8 @@ export default function ErrorAnalysisTab() {
                 <div className="sm:self-center shrink-0">
                   <button
                     type="button"
-                    onClick={() => handleApply(pat.id)}
-                    disabled={appliedActions[pat.id]}
+                    onClick={() => handleApply(pat)}
+                    disabled={appliedActions[pat.id] || applyingId === pat.id}
                     className={cn(
                       "px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5",
                       appliedActions[pat.id]
@@ -163,9 +206,9 @@ export default function ErrorAnalysisTab() {
                     )}
                   >
                     <span className="material-symbols-outlined text-[14px]">
-                      {appliedActions[pat.id] ? "check" : "auto_fix_high"}
+                      {appliedActions[pat.id] ? "check" : applyingId === pat.id ? "progress_activity" : "auto_fix_high"}
                     </span>
-                    {appliedActions[pat.id] ? "Recomandare Aplicată" : pat.recommendation?.label || "Aplică Ajustarea"}
+                    {appliedActions[pat.id] ? "Recomandare Aplicată" : applyingId === pat.id ? "Se aplică..." : pat.recommendation?.label || "Aplică Ajustarea"}
                   </button>
                 </div>
               </div>

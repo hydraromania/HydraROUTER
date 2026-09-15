@@ -459,8 +459,9 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     // Use shared chatCore
     const chatSettings = await getSettings();
     const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
-    const responseFormatOverride = await getResponseFormatOverrideForApiKey(apiKey);
-    const result = await handleChatCore({
+    const ratePacing = (chatSettings.ratePacing || {})[provider] || null;
+    const stripTools = !!((chatSettings.toolStripProviders || {})[provider]);
+    const responseFormatOverride = await getResponseFormatOverrideForApiKey(apiKey);    const result = await handleChatCore({
       body: { ...body, model: `${provider}/${model}` },
       modelInfo: { provider, model },
       credentials: refreshedCredentials,
@@ -486,6 +487,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       pxpipeTransform: chatSettings.pxpipeEnabled ? await getPxpipeTransform() : null,
       onPxpipeEvent: appendPxpipeEvent,
       providerThinking,
+      ratePacing,
+      stripTools,
       // Detect source format by endpoint + body
       sourceFormatOverride: request?.url ? detectFormatByEndpoint(new URL(request.url).pathname, body) : null,
       responseFormatOverride,

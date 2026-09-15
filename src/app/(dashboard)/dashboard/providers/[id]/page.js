@@ -25,6 +25,7 @@ import ConnectionRow from "./ConnectionRow";
 import AddApiKeyModal from "./AddApiKeyModal";
 import EditCompatibleNodeModal from "./EditCompatibleNodeModal";
 import AddCustomModelModal from "./AddCustomModelModal";
+import ModelSettingsModal from "./ModelSettingsModal";
 import BulkImportCodexModal from "./BulkImportCodexModal";
 import BulkImportGrokCliModal from "./BulkImportGrokCliModal";
 import RateLimitsTable from "./RateLimitsTable";
@@ -66,6 +67,7 @@ export default function ProviderDetailPage() {
   const [modelsTestError, setModelsTestError] = useState("");
   const [testingModelIds, setTestingModelIds] = useState(() => new Set());
   const [showAddCustomModel, setShowAddCustomModel] = useState(false);
+  const [settingsModel, setSettingsModel] = useState(null);
   const [selectedConnectionIds, setSelectedConnectionIds] = useState([]);
   const [bulkProxyPoolId, setBulkProxyPoolId] = useState("__none__");
   const [bulkUpdatingProxy, setBulkUpdatingProxy] = useState(false);
@@ -1234,7 +1236,7 @@ function SortableConnectionItem({
           onCopy={copy}
           onSetAlias={handleSetAlias}
           onDeleteAlias={handleDeleteAlias}
-          onAddCustomModel={(modelId) => handleAddCustomModel(modelId, "llm", providerStorageAlias)}
+          onAddCustomModel={(modelId, caps) => handleAddCustomModel(modelId, "llm", providerStorageAlias, caps)}
           onDeleteCustomModel={(modelId) => handleDeleteCustomModel(modelId, "llm", providerStorageAlias)}
           connections={connections}
           isAnthropic={isAnthropicCompatible}
@@ -1287,6 +1289,7 @@ function SortableConnectionItem({
               isFree={false}
               caps={getCaps(`${providerId}/${model.id}`)}
               thinkingSuffix={resolveThinkingSuffix(model.id)}
+              onSettings={() => setSettingsModel({ id: model.id, fullModel: `${providerDisplayAlias}/${model.id}`, caps: getCaps(`${providerId}/${model.id}`), thinkingLevels: getThinkingLevels(providerId, model.id), isCustom: model.source === "custom" })}
               isBlocked={isBlocked}
               blockedInfo={blockedInfo}
               onUnblock={() => handleUnblockModel(blockedInfo?.model || `${providerStorageAlias}/${model.id}`)}
@@ -1320,6 +1323,7 @@ function SortableConnectionItem({
               onDisable={() => handleDisableModel(model.id)}
               caps={getCaps(`${providerId}/${model.id}`)}
               thinkingSuffix={resolveThinkingSuffix(model.id)}
+              onSettings={() => setSettingsModel({ id: model.id, fullModel: `${providerDisplayAlias}/${model.id}`, caps: getCaps(`${providerId}/${model.id}`), thinkingLevels: getThinkingLevels(providerId, model.id), isCustom: false })}
               isBlocked={isBlocked}
               blockedInfo={blockedInfo}
               onUnblock={() => handleUnblockModel(blockedInfo?.model || fullModel)}
@@ -1957,6 +1961,7 @@ function SortableConnectionItem({
           isOpen={showAddCustomModel}
           providerAlias={providerStorageAlias}
           providerDisplayAlias={providerDisplayAlias}
+          providerId={providerId}
           onSave={async (modelId, caps) => {
             await handleAddCustomModel(modelId, "llm", providerStorageAlias, caps);
             setShowAddCustomModel(false);
@@ -1964,6 +1969,18 @@ function SortableConnectionItem({
           onClose={() => setShowAddCustomModel(false)}
         />
       )}
+      <ModelSettingsModal
+        isOpen={!!settingsModel}
+        onClose={() => setSettingsModel(null)}
+        modelId={settingsModel?.id}
+        fullModel={settingsModel?.fullModel}
+        caps={settingsModel?.caps}
+        thinkingLevels={settingsModel?.thinkingLevels}
+        isCustom={settingsModel?.isCustom}
+        onSave={settingsModel?.isCustom ? async (mergedCaps) => {
+          await handleAddCustomModel(settingsModel.id, "llm", providerStorageAlias, mergedCaps);
+        } : undefined}
+      />
 
       {providerId === "codex" && (
         <BulkImportCodexModal

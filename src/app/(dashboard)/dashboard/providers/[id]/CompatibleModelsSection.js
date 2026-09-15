@@ -4,7 +4,10 @@ import { useState } from "react";
 import PropTypes from "prop-types";
 import { Button } from "@/shared/components";
 import { getProviderCustomModelRows } from "@/shared/utils/providerCustomModels";
-function CompatibleModelRow({ modelId, fullModel, copied, onCopy, onDeleteAlias, onTest, testStatus, isTesting }) {
+import { useModelCaps } from "@/shared/hooks/useModelCaps";
+import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
+import ModelSettingsModal from "./ModelSettingsModal";
+function CompatibleModelRow({ modelId, fullModel, copied, onCopy, onDeleteAlias, onTest, testStatus, isTesting, onSettings }) {
   const borderColor = testStatus === "ok"
     ? "border-green-500/40"
     : testStatus === "error"
@@ -58,6 +61,20 @@ function CompatibleModelRow({ modelId, fullModel, copied, onCopy, onDeleteAlias,
               </span>
             </div>
           )}
+          {onSettings && (
+            <div className="relative group/btn">
+              <button
+                onClick={onSettings}
+                className="p-0.5 hover:bg-sidebar rounded text-text-muted hover:text-primary transition-colors"
+                title="Model settings"
+              >
+                <span className="material-symbols-outlined text-sm">settings</span>
+              </button>
+              <span className="pointer-events-none absolute top-5 left-1/2 -translate-x-1/2 text-[10px] text-text-muted whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity">
+                Settings
+              </span>
+            </div>
+          )}
         </div>
       </div>
       <button
@@ -77,6 +94,8 @@ export default function CompatibleModelsSection({ providerStorageAlias, provider
   const [importing, setImporting] = useState(false);
   const [testingModelId, setTestingModelId] = useState(null);
   const [modelTestResults, setModelTestResults] = useState({});
+  const [settingsModel, setSettingsModel] = useState(null);
+  const { getCaps } = useModelCaps();
 
   const handleTestModel = async (modelId) => {
     if (testingModelId) return;
@@ -206,10 +225,23 @@ export default function CompatibleModelsSection({ providerStorageAlias, provider
               onTest={connections.length > 0 ? () => handleTestModel(id) : undefined}
               testStatus={modelTestResults[id]}
               isTesting={testingModelId === id}
+              onSettings={() => setSettingsModel({ id, source })}
             />
           ))}
         </div>
       )}
+      <ModelSettingsModal
+        isOpen={!!settingsModel}
+        onClose={() => setSettingsModel(null)}
+        modelId={settingsModel?.id}
+        fullModel={settingsModel ? `${providerDisplayAlias}/${settingsModel.id}` : ""}
+        caps={settingsModel ? getCaps(`${providerStorageAlias}/${settingsModel.id}`) : null}
+        thinkingLevels={settingsModel ? getThinkingLevels(providerStorageAlias, settingsModel.id) : null}
+        isCustom={settingsModel?.source === "custom"}
+        onSave={settingsModel?.source === "custom" ? async (mergedCaps) => {
+          await onAddCustomModel(settingsModel.id, mergedCaps);
+        } : undefined}
+      />
     </div>
   );
 }

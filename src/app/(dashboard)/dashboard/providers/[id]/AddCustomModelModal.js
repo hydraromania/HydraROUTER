@@ -4,19 +4,23 @@ import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Button, Modal, Toggle } from "@/shared/components";
 import { CAPACITY_META } from "@/shared/constants/models";
+import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
+import { getCapabilitiesForModel } from "open-sse/providers/capabilities.js";
 
 const defaultCaps = () => Object.fromEntries(Object.keys(CAPACITY_META).map((key) => [key, false]));
 
-export default function AddCustomModelModal({ isOpen, providerAlias, providerDisplayAlias, onSave, onClose }) {
+export default function AddCustomModelModal({ isOpen, providerAlias, providerDisplayAlias, providerId, onSave, onClose }) {
   const [modelId, setModelId] = useState("");
   const [caps, setCaps] = useState(defaultCaps);
+  const [ctx, setCtx] = useState("");
+  const [maxOut, setMaxOut] = useState("");
   const [testStatus, setTestStatus] = useState(null); // null | "testing" | "ok" | "error"
   const [testError, setTestError] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
-    if (isOpen) { setModelId(""); setCaps(defaultCaps()); setTestStatus(null); setTestError(""); }
+    if (isOpen) { setModelId(""); setCaps(defaultCaps()); setCtx(""); setMaxOut(""); setTestStatus(null); setTestError(""); }
   }, [isOpen]);
 
   // Strip provider's own alias prefix (e.g. "cc/model" -> "model" for cc provider)
@@ -50,7 +54,12 @@ export default function AddCustomModelModal({ isOpen, providerAlias, providerDis
     if (!cleanId || saving) return;
     setSaving(true);
     try {
-      await onSave(cleanId, caps);
+      const merged = { ...caps };
+      const cw = parseInt(ctx, 10);
+      const mo = parseInt(maxOut, 10);
+      if (Number.isFinite(cw) && cw > 0) merged.contextWindow = cw;
+      if (Number.isFinite(mo) && mo > 0) merged.maxOutput = mo;
+      await onSave(cleanId, merged);
     } finally {
       setSaving(false);
     }
@@ -91,6 +100,17 @@ export default function AddCustomModelModal({ isOpen, providerAlias, providerDis
         </div>
 
         <div>
+          <label className="text-sm font-medium mb-1.5 block">Settings</label>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs text-text-muted mb-1 block">Context window</label>
+              <input type="number" min="0" value={ctx} onChange={(e) => setCtx(e.target.value)} placeholder="e.g. 200000" className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="text-xs text-text-muted mb-1 block">Max output</label>
+              <input type="number" min="0" value={maxOut} onChange={(e) => setMaxOut(e.target.value)} placeholder="e.g. 64000" className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary" />
+            </div>
+          </div>
           <label className="text-sm font-medium mb-1.5 block">Capabilities</label>
           <div className="flex flex-wrap gap-4">
             {Object.entries(CAPACITY_META).map(([key, meta]) => (
@@ -104,6 +124,28 @@ export default function AddCustomModelModal({ isOpen, providerAlias, providerDis
               />
             ))}
           </div>
+          {(() => {
+            const clean = stripAlias(modelId.trim());
+            if (!clean) return null;
+            let levels = null;
+            try { levels = getThinkingLevels(providerId || providerAlias, clean); } catch { levels = null; }
+            let reasoning = caps.reasoning;
+            try { reasoning = reasoning || getCapabilitiesForModel(providerId || providerAlias, clean)?.reasoning; } catch { /* noop */ }
+            return (
+              <div className="mt-3">
+                <label className="text-sm font-medium mb-1.5 block">Thinking</label>
+                {levels?.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {levels.map((l) => (
+                      <span key={l} className="rounded bg-sidebar px-2 py-0.5 font-mono text-xs text-text-muted">{l}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-text-muted">{reasoning ? "Reasoning supported (no level list for this model)" : "No thinking / reasoning for this model"}</p>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Test result */}
@@ -140,6 +182,7 @@ AddCustomModelModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   providerAlias: PropTypes.string.isRequired,
   providerDisplayAlias: PropTypes.string.isRequired,
+  providerId: PropTypes.string,
   onSave: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
 };

@@ -44,3 +44,12 @@ if (!global._geminiRatePacer) {
 }
 
 export const geminiRatePacer = global._geminiRatePacer;
+
+// Generic per-provider pacer for Error Analysis "enable_pacing" fixes.
+// Settings persist the intent (settings.ratePacing[provider]); this pacer
+// enforces it at request time. Keyed per provider+connection like Gemini.
+if (!global._errorAnalysisRatePacer) {
+  global._errorAnalysisRatePacer = new RatePacer(1000);
+}
+
+export const errorAnalysisRatePacer = global._errorAnalysisRatePacer;

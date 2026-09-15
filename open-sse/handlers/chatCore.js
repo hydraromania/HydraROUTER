@@ -31,7 +31,7 @@ import { prefetchRemoteImages } from "../translator/concerns/prefetch.js";
 import { defaultClaudeToolType } from "../translator/concerns/toolCall.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
 import { detectAndLearnError, tryAutoCorrect, initErrorLearning } from "../utils/errorLearning.js";
-import { geminiRatePacer } from "../utils/ratePacer.js";
+import { geminiRatePacer, errorAnalysisRatePacer } from "../utils/ratePacer.js";
 
 initErrorLearning({ enabled: true, path: process.env.DATA_DIR ? `${process.env.DATA_DIR}/error-learning.json` : null });
 
@@ -62,7 +62,7 @@ export function stripContinuityFields(body) {
   return body;
 }
 
-export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, responseFormatOverride, providerThinking }) {
+export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, responseFormatOverride, providerThinking, ratePacing, stripTools }) {
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
   // Stable per-session color so all lines of one CLI conversation share a tag
@@ -116,11 +116,19 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     if (mode === "on" && !body.thinking) {
       console.log("Injecting provider-level thinking config override: on");
       body = { ...body, thinking: { type: "enabled", budget_tokens: 10000 } };
-    } else if (mode === "off" && !body.thinking) {
+    } else if ((mode === "off" || mode === "none") && !body.thinking) {
       body = { ...body, thinking: { type: "disabled" } };
+      if (!body.reasoning_effort) body = { ...body, reasoning_effort: "none" };
     } else if (!body.reasoning_effort) {
       body = { ...body, reasoning_effort: mode };
     }
+  }
+
+  // Error Analysis fix: drop tools for providers whose tier rejects function calling
+  if (stripTools) {
+    if (body.tools) delete body.tools;
+    if (body.tool_choice) delete body.tool_choice;
+    if (body.function_call) delete body.function_call;
   }
 
   const clientRequestedStreaming = body.stream === true || sourceFormat === FORMATS.ANTIGRAVITY || sourceFormat === FORMATS.GEMINI || sourceFormat === FORMATS.GEMINI_CLI;
@@ -394,6 +402,14 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (provider === "gemini" || provider === "gemini-cli") {
     const paceKey = `${provider}:${credentials?.connectionId || proxyOptions?.connectionProxyUrl || "direct"}`;
     await geminiRatePacer.acquire(paceKey);
+  }
+
+  // Error Analysis fix: per-provider rate pacing (settings.ratePacing[provider]).
+  // Gemini already has its own always-on pacer — skip the generic one there to avoid double delay.
+  if (ratePacing?.enabled && provider !== "gemini" && provider !== "gemini-cli") {
+    const paceKey = `${provider}:${credentials?.connectionId || proxyOptions?.connectionProxyUrl || "direct"}`;
+    await errorAnalysisRatePacer.acquire(paceKey, Number(ratePacing.minIntervalMs) || 1000);
+    log?.debug?.("PACING", `${provider} | 1 req/${Number(ratePacing.minIntervalMs) || 1000}ms (error-analysis fix)`);
   }
 
   // Execute request

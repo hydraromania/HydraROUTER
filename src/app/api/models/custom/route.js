@@ -11,6 +11,10 @@ function sanitizeCaps(caps) {
   for (const key of Object.keys(CAPACITY_META)) {
     if (typeof caps[key] === "boolean") clean[key] = caps[key];
   }
+  for (const key of ["contextWindow", "maxOutput"]) {
+    const v = Number(caps[key]);
+    if (Number.isFinite(v) && v > 0) clean[key] = Math.floor(v);
+  }
   return Object.keys(clean).length ? clean : null;
 }
 

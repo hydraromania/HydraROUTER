@@ -13,7 +13,7 @@ describe("UsagePage Error Analysis Tab registration", () => {
       "utf8"
     );
     expect(file).toContain('import ErrorAnalysisTab from "./components/ErrorAnalysisTab"');
-    expect(file).toContain('{ value: "errorAnalysis", label: "Error Analysis (429/410)" }');
+    expect(file).toContain('{ value: "errorAnalysis", label: "Error Analysis (400/429/410)" }');
     expect(file).toContain('{activeTab === "errorAnalysis" && <ErrorAnalysisTab />}');
   });
 });
