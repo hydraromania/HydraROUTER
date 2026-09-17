@@ -220,18 +220,35 @@ function UsageContent() {
   const groupedItems = useMemo(() => {
     const groups = new Map();
     for (const item of filteredItems) {
-      const groupKey = item.sessionId
-        ? `Session: ${item.sessionId}`
-        : item.apiKeyName && item.apiKeyName !== "Local / Direct"
-        ? `Key: ${item.apiKeyName}`
-        : item.clientIp
-        ? `IP: ${item.clientIp}`
-        : "Direct / Local";
+      let groupKey;
+      let groupTitle;
+      if (item.sessionId) {
+        if (item.sessionId.startsWith("claude:")) {
+          groupKey = "Session: claude (Claude Code)";
+          groupTitle = "Session: Claude Code";
+        } else if (item.sessionId.includes(":")) {
+          const prefix = item.sessionId.split(":")[0];
+          groupKey = `Session: ${prefix}`;
+          groupTitle = `Session: ${prefix.toUpperCase()}`;
+        } else {
+          groupKey = `Session: ${item.sessionId}`;
+          groupTitle = `Session: ${item.sessionId}`;
+        }
+      } else if (item.apiKeyName && item.apiKeyName !== "Local / Direct") {
+        groupKey = `Key: ${item.apiKeyName}`;
+        groupTitle = groupKey;
+      } else if (item.clientIp) {
+        groupKey = `IP: ${item.clientIp}`;
+        groupTitle = groupKey;
+      } else {
+        groupKey = "Direct / Local";
+        groupTitle = groupKey;
+      }
 
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
           id: groupKey,
-          title: groupKey,
+          title: groupTitle,
           items: [],
           activeCount: 0,
           completedCount: 0,
@@ -246,6 +263,16 @@ function UsageContent() {
     }
     return Array.from(groups.values());
   }, [filteredItems]);
+
+  const groupedAvailableModels = useMemo(() => {
+    const map = new Map();
+    for (const m of availableModels) {
+      const p = m.provider || "Other";
+      if (!map.has(p)) map.set(p, []);
+      map.get(p).push(m);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [availableModels]);
 
   const toggleGroup = (groupId) => {
     setExpandedGroups((prev) => ({
@@ -461,36 +488,36 @@ function UsageContent() {
                     {/* Group Header Bar */}
                     <div
                       onClick={() => toggleGroup(group.id)}
-                      className="flex flex-wrap items-center justify-between gap-3 bg-surface px-4 py-3 border-b border-border cursor-pointer hover:bg-surface-hover transition-colors"
+                      className="flex flex-wrap items-center justify-between gap-2 bg-surface px-3 py-1.5 border-b border-border cursor-pointer hover:bg-surface-hover transition-colors select-none"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[18px] text-text-muted transition-transform duration-200" style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}>
+                        <span className="material-symbols-outlined text-[16px] text-text-muted transition-transform duration-200" style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}>
                           chevron_right
                         </span>
-                        <span className="font-mono text-sm font-bold text-text-main">
+                        <span className="font-mono text-xs font-bold text-text-main">
                           {group.title}
                         </span>
-                        <span className="text-xs text-text-muted font-sans">
+                        <span className="text-[11px] text-text-muted font-sans">
                           ({group.items.length} {group.items.length === 1 ? "request" : "requests"})
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 text-[11px]">
                         {group.activeCount > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2.5 py-0.5 font-bold text-indigo-500">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-0.2 font-bold text-indigo-500">
                             <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
                             {group.activeCount} Active
                           </span>
                         )}
                         {group.completedCount > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 font-medium text-emerald-500">
-                            <span className="material-symbols-outlined text-[12px]">check</span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.2 font-medium text-emerald-500">
+                            <span className="material-symbols-outlined text-[11px]">check</span>
                             {group.completedCount} OK
                           </span>
                         )}
                         {group.errorCount > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2.5 py-0.5 font-bold text-rose-500">
-                            <span className="material-symbols-outlined text-[12px]">error</span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.2 font-bold text-rose-500">
+                            <span className="material-symbols-outlined text-[11px]">error</span>
                             {group.errorCount} Error
                           </span>
                         )}
@@ -501,18 +528,18 @@ function UsageContent() {
                     {expanded && (
                       <div className="overflow-x-auto max-h-[500px] overflow-y-auto font-mono text-xs">
                         <table className="w-full text-left border-collapse whitespace-nowrap">
-                          <thead className="sticky top-0 bg-surface/90 backdrop-blur border-b border-border z-10 font-sans text-[11px] uppercase tracking-wider text-text-muted">
+                          <thead className="sticky top-0 bg-surface/90 backdrop-blur border-b border-border z-10 font-sans text-[10px] uppercase tracking-wider text-text-muted">
                             <tr>
-                              <th className="px-2.5 py-2 border-r border-border w-24">Status</th>
-                              <th className="px-2.5 py-2 border-r border-border w-16">Type</th>
-                              <th className="px-2.5 py-2 border-r border-border max-w-[120px]">API Key</th>
-                              <th className="px-2.5 py-2 border-r border-border min-w-[160px] max-w-[280px]">Model / Provider</th>
-                              <th className="px-2.5 py-2 border-r border-border max-w-[100px]">Account</th>
-                              <th className="px-2.5 py-2 border-r border-border max-w-[140px]">Proxy / Egress</th>
-                              <th className="px-2.5 py-2 border-r border-border text-right w-24">Tokens</th>
-                              <th className="px-2.5 py-2 border-r border-border text-right w-16">Duration</th>
-                              <th className="px-2.5 py-2 border-r border-border min-w-[120px]">Details</th>
-                              <th className="px-2.5 py-2 text-right w-28">Actions</th>
+                              <th className="px-2 py-1 border-r border-border w-20">Status</th>
+                              <th className="px-2 py-1 border-r border-border w-14">Type</th>
+                              <th className="px-2 py-1 border-r border-border max-w-[120px]">API Key</th>
+                              <th className="px-2 py-1 border-r border-border min-w-[160px] max-w-[280px]">Model / Provider</th>
+                              <th className="px-2 py-1 border-r border-border max-w-[100px]">Account</th>
+                              <th className="px-2 py-1 border-r border-border max-w-[140px]">Proxy / Egress</th>
+                              <th className="px-2 py-1 border-r border-border text-right w-20">Tokens</th>
+                              <th className="px-2 py-1 border-r border-border text-right w-16">Duration</th>
+                              <th className="px-2 py-1 border-r border-border min-w-[120px]">Details</th>
+                              <th className="px-2 py-1 text-right w-24">Actions</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border/50">
@@ -529,7 +556,7 @@ function UsageContent() {
                                 <tr
                                   key={item.id}
                                   className={cn(
-                                    "relative group hover:bg-surface-hover transition-colors font-mono text-[11px]",
+                                    "relative group hover:bg-surface-hover transition-colors font-mono text-[10.5px]",
                                     isActive && "bg-primary/5 dark:bg-primary/10",
                                     isStuck && !isVeryStuck && "bg-amber-500/10 dark:bg-amber-500/15",
                                     isVeryStuck && "bg-error/10 dark:bg-error/20",
@@ -537,7 +564,7 @@ function UsageContent() {
                                   )}
                                 >
                                   {/* Status Indicator */}
-                                  <td className="px-2.5 py-1.5 border-r border-border text-center whitespace-nowrap">
+                                  <td className="px-2 py-0.5 border-r border-border text-center whitespace-nowrap">
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -545,32 +572,32 @@ function UsageContent() {
                                         setCopied(false);
                                       }}
                                       title="Vezi payload-ul și parametrii cererii (JSON)"
-                                      className="inline-flex items-center justify-center p-1 rounded hover:bg-bg-subtle transition-colors cursor-pointer"
+                                      className="inline-flex items-center justify-center p-0.5 rounded hover:bg-bg-subtle transition-colors cursor-pointer"
                                     >
                                       {isActive && !isStuck && (
-                                        <span className="inline-flex items-center gap-1 text-primary font-bold animate-pulse text-[10px]">
+                                        <span className="inline-flex items-center gap-1 text-primary font-bold animate-pulse text-[9.5px]">
                                           <span className="h-1.5 w-1.5 rounded-full bg-primary animate-ping"></span>
                                           ACTIVE
                                         </span>
                                       )}
                                       {isActive && isStuck && (
                                         <span className={cn(
-                                          "inline-flex items-center gap-1 font-bold animate-pulse text-[10px]",
+                                          "inline-flex items-center gap-1 font-bold animate-pulse text-[9.5px]",
                                           isVeryStuck ? "text-error" : "text-amber-500"
                                         )} title={`Request-ul rulează de ${formatDuration(duration)} fără să finalizeze`}>
-                                          <span className="material-symbols-outlined text-[13px]">warning</span>
+                                          <span className="material-symbols-outlined text-[12px]">warning</span>
                                           {isVeryStuck ? "BLOCAT" : "LENT"}
                                         </span>
                                       )}
                                       {isSuccess && (
-                                        <span className="inline-flex items-center gap-1 text-success font-medium text-[10px]">
-                                          <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                                        <span className="inline-flex items-center gap-1 text-success font-medium text-[9.5px]">
+                                          <span className="material-symbols-outlined text-[12px]">check_circle</span>
                                           {item.statusCode || 200}
                                         </span>
                                       )}
                                       {isError && (
-                                        <span className="inline-flex items-center gap-1 text-error font-bold text-[10px]">
-                                          <span className="material-symbols-outlined text-[13px]">error</span>
+                                        <span className="inline-flex items-center gap-1 text-error font-bold text-[9.5px]">
+                                          <span className="material-symbols-outlined text-[12px]">error</span>
                                           {item.statusCode || "ERR"}
                                         </span>
                                       )}
@@ -578,9 +605,9 @@ function UsageContent() {
                                   </td>
 
                                   {/* Request Type */}
-                                  <td className="px-2.5 py-1.5 border-r border-border whitespace-nowrap">
+                                  <td className="px-2 py-0.5 border-r border-border whitespace-nowrap">
                                     <span className={cn(
-                                      "rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+                                      "rounded px-1 py-0.2 text-[8.5px] font-bold uppercase tracking-wider",
                                       item.type === "chat" && "bg-blue-500/10 text-blue-500",
                                       item.type === "embeddings" && "bg-purple-500/10 text-purple-500",
                                       item.type === "image" && "bg-pink-500/10 text-pink-500",
@@ -593,24 +620,24 @@ function UsageContent() {
                                   </td>
 
                                   {/* API Key (Cod API) */}
-                                  <td className="px-2.5 py-1.5 border-r border-border max-w-[120px]">
+                                  <td className="px-2 py-0.5 border-r border-border max-w-[120px]">
                                     <div className="flex flex-col truncate">
-                                      <span className="font-semibold text-text-main font-sans text-[11px] truncate" title={item.apiKeyName || "Local"}>{item.apiKeyName || "Local"}</span>
+                                      <span className="font-semibold text-text-main font-sans text-[10.5px] truncate" title={item.apiKeyName || "Local"}>{item.apiKeyName || "Local"}</span>
                                       {item.apiKey && (
-                                        <span className="text-[9px] text-text-muted font-mono truncate" title={item.apiKey}>{item.apiKey}</span>
+                                        <span className="text-[8.5px] text-text-muted font-mono truncate" title={item.apiKey}>{item.apiKey}</span>
                                       )}
                                     </div>
                                   </td>
 
                                   {/* Model & Provider */}
-                                  <td className="px-2.5 py-1.5 border-r border-border min-w-[160px] max-w-[280px]">
+                                  <td className="px-2 py-0.5 border-r border-border min-w-[160px] max-w-[280px]">
                                     <div className="flex flex-col min-w-0">
-                                      <span className="font-medium text-text-main break-words font-mono text-[11px]" title={item.model}>
+                                      <span className="font-medium text-text-main break-words font-mono text-[10.5px]" title={item.model}>
                                         {item.model}
                                       </span>
-                                      <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                                         {item.provider && (
-                                          <span className="shrink-0 rounded bg-bg-subtle px-1 py-0.2 text-[9px] uppercase font-bold text-text-muted border border-border">
+                                          <span className="shrink-0 rounded bg-bg-subtle px-1 py-0 text-[8.5px] uppercase font-bold text-text-muted border border-border">
                                             {item.provider}
                                           </span>
                                         )}
@@ -624,43 +651,43 @@ function UsageContent() {
                                   </td>
 
                                   {/* Account */}
-                                  <td className="px-2.5 py-1.5 border-r border-border text-text-muted truncate max-w-[100px]" title={item.accountName}>
-                                    <span className="truncate block">{item.accountName || "-"}</span>
+                                  <td className="px-2 py-0.5 border-r border-border text-text-muted truncate max-w-[100px]" title={item.accountName}>
+                                    <span className="truncate block text-[10px]">{item.accountName || "-"}</span>
                                   </td>
 
                                   {/* Proxy / Egress */}
-                                  <td className="px-2.5 py-1.5 border-r border-border max-w-[140px]">
+                                  <td className="px-2 py-0.5 border-r border-border max-w-[140px]">
                                     {item.proxy?.url ? (
-                                      <div className="flex flex-col gap-0.5 min-w-0">
+                                      <div className="flex flex-col min-w-0">
                                         <div className="flex items-center gap-1 min-w-0">
-                                          <span className="material-symbols-outlined text-[12px] text-primary shrink-0">router</span>
-                                          <span className="text-[10px] font-semibold text-text-main truncate" title={proxyPoolMap.get(item.proxy.poolId)?.name || item.proxy.poolId || "Proxy"}>
+                                          <span className="material-symbols-outlined text-[11px] text-primary shrink-0">router</span>
+                                          <span className="text-[9.5px] font-semibold text-text-main truncate" title={proxyPoolMap.get(item.proxy.poolId)?.name || item.proxy.poolId || "Proxy"}>
                                             {proxyPoolMap.get(item.proxy.poolId)?.name || (item.proxy.poolId ? `Pool: ${item.proxy.poolId.slice(0, 8)}` : (item.proxy.type === "relay" ? "Relay" : "Proxy"))}
                                           </span>
                                           {item.proxy.isAuto && (
-                                            <span className="shrink-0 rounded bg-primary/10 px-1 py-0.2 text-[8px] font-bold uppercase text-primary">
+                                            <span className="shrink-0 rounded bg-primary/10 px-1 py-0 text-[7.5px] font-bold uppercase text-primary">
                                               Auto
                                             </span>
                                           )}
                                         </div>
-                                        <span className="font-mono text-[9px] text-text-muted truncate" title={item.proxy.url}>
+                                        <span className="font-mono text-[8.5px] text-text-muted truncate" title={item.proxy.url}>
                                           {item.proxy.url}
                                         </span>
                                       </div>
                                     ) : (
-                                      <span className="text-text-muted/60 text-[10px] font-mono">Direct</span>
+                                      <span className="text-text-muted/60 text-[9.5px] font-mono">Direct</span>
                                     )}
                                   </td>
 
                                   {/* Tokens */}
-                                  <td className="px-2.5 py-1.5 border-r border-border text-right whitespace-nowrap text-[11px]">
+                                  <td className="px-2 py-0.5 border-r border-border text-right whitespace-nowrap text-[10px]">
                                     {formatTokens(item.tokens)}
                                   </td>
 
                                   {/* Duration */}
-                                  <td className="px-2.5 py-1.5 border-r border-border text-right whitespace-nowrap">
+                                  <td className="px-2 py-0.5 border-r border-border text-right whitespace-nowrap">
                                     <span className={cn(
-                                      "text-[10px]",
+                                      "text-[9.5px]",
                                       isActive ? "text-primary font-bold animate-pulse" : "text-text-muted"
                                     )}>
                                       {formatDuration(duration)}
@@ -668,22 +695,22 @@ function UsageContent() {
                                   </td>
 
                                   {/* Error or Details Message */}
-                                  <td className="px-2.5 py-1.5 max-w-[180px] border-r border-border">
+                                  <td className="px-2 py-0.5 max-w-[180px] border-r border-border">
                                     {isError ? (
-                                      <span className="text-error font-medium truncate block text-[10px]" title={item.error}>
+                                      <span className="text-error font-medium truncate block text-[9.5px]" title={item.error}>
                                         {item.error}
                                       </span>
                                     ) : isActive ? (
-                                      <span className={cn("italic truncate block text-[10px]", isStuck ? "text-amber-500 font-medium" : "text-text-muted")}>
+                                      <span className={cn("italic truncate block text-[9.5px]", isStuck ? "text-amber-500 font-medium" : "text-text-muted")}>
                                         {isVeryStuck ? "Posibil blocat..." : isStuck ? "Răspuns întârziat..." : "Processing stream..."}
                                       </span>
                                     ) : (
-                                      <span className="text-success font-medium truncate block text-[10px]">Finished OK</span>
+                                      <span className="text-success font-medium truncate block text-[9.5px]">Finished OK</span>
                                     )}
                                   </td>
 
                                   {/* Actions */}
-                                  <td className="px-2.5 py-1 text-right whitespace-nowrap">
+                                  <td className="px-2 py-0.5 text-right whitespace-nowrap">
                                     {isActive ? (
                                       <div className="inline-flex items-center gap-1 font-sans">
                                         <button
@@ -696,13 +723,13 @@ function UsageContent() {
                                           disabled={!!currentAction}
                                           title="Rerutează cererea către un model specific din combo/provideri"
                                           className={cn(
-                                            "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors cursor-pointer",
+                                            "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9.5px] font-semibold transition-colors cursor-pointer",
                                             isStuck
                                               ? "bg-primary text-white hover:bg-primary/90 shadow-sm animate-pulse"
                                               : "bg-primary/10 text-primary hover:bg-primary/20"
                                           )}
                                         >
-                                          <span className="material-symbols-outlined text-[13px]">
+                                          <span className="material-symbols-outlined text-[11px]">
                                             {currentAction === "reroute" ? "progress_activity" : "alt_route"}
                                           </span>
                                           {currentAction === "reroute" ? "Rerutez..." : "Rerutează"}
@@ -712,15 +739,15 @@ function UsageContent() {
                                           onClick={() => handleAction(item.id, "cancel")}
                                           disabled={!!currentAction}
                                           title="Oprește forțat requestul blocat"
-                                          className="inline-flex items-center rounded border border-border px-1 py-0.5 text-[10px] text-text-muted hover:bg-error/10 hover:text-error hover:border-error/30 transition-colors cursor-pointer"
+                                          className="inline-flex items-center rounded border border-border px-1 py-0.5 text-[9.5px] text-text-muted hover:bg-error/10 hover:text-error hover:border-error/30 transition-colors cursor-pointer"
                                         >
-                                          <span className="material-symbols-outlined text-[12px]">
+                                          <span className="material-symbols-outlined text-[11px]">
                                             {currentAction === "cancel" ? "progress_activity" : "close"}
                                           </span>
                                         </button>
                                       </div>
                                     ) : (
-                                      <span className="text-text-muted/40 font-mono text-[10px]">-</span>
+                                      <span className="text-text-muted/40 font-mono text-[9.5px]">-</span>
                                     )}
                                   </td>
                                 </tr>
@@ -775,10 +802,14 @@ function UsageContent() {
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-xs font-mono text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
                 >
                   <option value="">-- Redirecționare automată pe următorul model din combo --</option>
-                  {availableModels.map((m) => (
-                    <option key={m.routedModel || `${m.provider}/${m.model}`} value={m.routedModel || `${m.provider}/${m.model}`}>
-                      {m.routedModel || `${m.provider}/${m.model}`} {m.alias && m.alias !== m.model ? `(${m.alias})` : ""}
-                    </option>
+                  {groupedAvailableModels.map(([providerName, models]) => (
+                    <optgroup key={providerName} label={providerName.toUpperCase()}>
+                      {models.map((m) => (
+                        <option key={m.routedModel || `${m.provider}/${m.model}`} value={m.routedModel || `${m.provider}/${m.model}`}>
+                          {m.routedModel || `${m.provider}/${m.model}`} {m.alias && m.alias !== m.model ? `(${m.alias})` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
                 <p className="text-[11px] text-text-muted">
