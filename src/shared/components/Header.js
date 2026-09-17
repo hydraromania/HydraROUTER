@@ -316,6 +316,15 @@ export default function Header({ onMenuClick, showMenuButton = true }) {
           </div>
         )}
         <HeaderSearch />
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent("hydrarouter:open-command-palette"))}
+          className="btn-press hidden md:flex size-8 items-center justify-center rounded-lg border border-border bg-surface/60 text-text-muted transition-colors hover:text-text-main hover:border-primary/50"
+          title="Command palette (Ctrl+K)"
+          aria-label="Open command palette"
+        >
+          <span className="material-symbols-outlined text-[18px]">keyboard_command_key</span>
+        </button>
         <ThemeToggle />
         <HeaderLanguage />
         <HeaderMenu onLogout={handleLogout} />

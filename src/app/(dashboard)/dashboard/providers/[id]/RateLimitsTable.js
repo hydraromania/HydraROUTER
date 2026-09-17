@@ -14,7 +14,6 @@ const MODEL_LABELS = {
   "gemini-3.5-flash-lite": "3.5 Flash Lite",
   "gemini-3.1-flash-lite-preview": "3.1 Flash Lite",
   "gemini-2.5-flash-lite": "2.5 Flash Lite",
-  "gemma-4-31b-it": "Gemma 4 31B",
   "gemma-2-27b-it": "Gemma 2 27B",
   "gemma-2-9b-it": "Gemma 2 9B",
 };
@@ -39,19 +38,25 @@ function fmtTokens(n) {
   return `${(n / 1000).toFixed(0)}k`;
 }
 
-function CooldownBadge({ rateLimitedUntil, manualBlockUntil, currentTime, onUnblock }) {
+function CooldownBadge({ rateLimitedUntil, manualBlockUntil, currentTime, onUnblock429, onUnblockManual }) {
   const isManual = manualBlockUntil && manualBlockUntil > currentTime;
   const is429 = rateLimitedUntil && rateLimitedUntil > currentTime;
   if (!isManual && !is429) return null;
 
   const targetTime = isManual ? manualBlockUntil : rateLimitedUntil;
+  // ponytail: permanent = far-future manualBlockUntil. Upgrade path: blockReason column.
+  const isPermanent = isManual && targetTime > currentTime + 365 * 24 * 3600 * 1000;
   const secs = Math.ceil((targetTime - currentTime) / 1000);
-  const label =
-    secs >= 3600
+  const label = isPermanent
+    ? "definitiv"
+    : secs >= 3600
       ? `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`
       : secs >= 60
         ? `${Math.floor(secs / 60)}m ${secs % 60}s`
         : `${secs}s`;
+
+  const onUnblock = isManual ? onUnblockManual : onUnblock429;
+
   return (
     <div className="inline-flex items-center gap-1.5">
       <Badge variant={isManual ? "warning" : "error"} size="sm" dot>
@@ -87,9 +92,22 @@ function getRowStatus(row, currentTime) {
   return "ok";
 }
 
+function fmtLastCheck(ts, currentTime) {
+  if (!ts) return "—";
+  const t = typeof ts === "string" ? Date.parse(ts) : Number(ts);
+  if (!Number.isFinite(t)) return "—";
+  const s = Math.max(0, Math.floor((currentTime - t) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  return `${Math.floor(s / 3600)}h ago`;
+}
+
 function StatusBadge({ row, currentTime }) {
   const status = getRowStatus(row, currentTime);
-  if (status === "manual_blocked") return <Badge variant="warning" size="sm" dot>Blocat manual</Badge>;
+  if (status === "manual_blocked") {
+    const permanent = row.manualBlockUntil > currentTime + 365 * 24 * 3600 * 1000;
+    return <Badge variant="warning" size="sm" dot>{permanent ? "Blocat definitiv" : "Blocat manual"}</Badge>;
+  }
   if (status === "cooldown") return <Badge variant="error" size="sm" dot>429 Cooldown</Badge>;
   if (status === "rpd_exhausted") return <Badge variant="error" size="sm" dot>RPD Epuizat</Badge>;
   if (status === "rate_exhausted") {
@@ -97,6 +115,15 @@ function StatusBadge({ row, currentTime }) {
     return <Badge variant="warning" size="sm" dot>{rpmExhausted ? "RPM / min" : "TPM / min"}</Badge>;
   }
   return <Badge variant="success" size="sm" dot>OK</Badge>;
+}
+
+function DiscoveredHint({ value }) {
+  if (value === null || value === undefined) return null;
+  return (
+    <span className="font-mono text-[10px] text-text-muted" title="Limită reală descoperită pasiv dintr-un 429 Google (quotaValue). Null = încă necunoscută.">
+      real: {value}
+    </span>
+  );
 }
 
 function MiniProgressBar({ used = 0, limit, colorClass = "bg-primary" }) {
@@ -116,7 +143,7 @@ function MiniProgressBar({ used = 0, limit, colorClass = "bg-primary" }) {
   );
 }
 
-export default function RateLimitsTable({ providerId }) {
+export default function RateLimitsTable({ providerId, onUnlockConnectionLocks = null }) {
   const [rows, setRows] = useState([]);
   const [blockedModels, setBlockedModels] = useState([]);
   const [providerDefaults, setProviderDefaults] = useState(null);
@@ -128,7 +155,7 @@ export default function RateLimitsTable({ providerId }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // 'all' | 'ok' | 'issues' | 'blocked'
   const [selectedKey, setSelectedKey] = useState("all");
-  const [collapsedModels, setCollapsedModels] = useState(new Set());
+  const [expandedModels, setExpandedModels] = useState(new Set());
   const [compactView, setCompactView] = useState(false);
 
   // Editing key counter: { keyId, modelId, counter: 'rpd'|'rpm'|'tpm' }
@@ -209,8 +236,8 @@ export default function RateLimitsTable({ providerId }) {
     }
   };
 
-  // Unblock block / 429 for a specific key
-  const handleUnblockKey = async (row) => {
+  // Unblock 429 cooldown or manual block for a specific key
+  const handleUnblockKey = async (row, actionType = "unblock429") => {
     try {
       const res = await fetch("/api/rate-limits", {
         method: "POST",
@@ -219,7 +246,7 @@ export default function RateLimitsTable({ providerId }) {
           provider: providerId,
           model: row.modelId,
           keyId: row.keyId,
-          action: "unblock429",
+          action: actionType,
         }),
       });
       if (res.ok) fetchRateLimits();
@@ -244,6 +271,30 @@ export default function RateLimitsTable({ providerId }) {
       if (res.ok) fetchRateLimits();
     } catch (error) {
       console.log("Error resetting key:", error);
+    }
+  };
+
+  // Test a single model+key pair (ping that model pinned to that connection)
+  const [testingKey, setTestingKey] = useState(null);
+
+  const handleTestKey = async (row) => {
+    const testKey = `${row.keyId}:${row.modelId}`;
+    setTestingKey(testKey);
+    try {
+      const res = await fetch("/api/models/test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-connection-id": row.keyId,
+        },
+        body: JSON.stringify({ model: `${providerId}/${row.modelId}`, kind: "llm" }),
+      });
+      await res.json().catch(() => null);
+      fetchRateLimits();
+    } catch (error) {
+      console.log("Error testing key:", error);
+    } finally {
+      setTestingKey(null);
     }
   };
 
@@ -358,7 +409,7 @@ export default function RateLimitsTable({ providerId }) {
   };
 
   const toggleModelCollapse = (modelId) => {
-    setCollapsedModels((prev) => {
+    setExpandedModels((prev) => {
       const next = new Set(prev);
       if (next.has(modelId)) next.delete(modelId);
       else next.add(modelId);
@@ -367,12 +418,23 @@ export default function RateLimitsTable({ providerId }) {
   };
 
   const collapseAll = () => {
-    const all = new Set(rows.map((r) => r.modelId));
-    setCollapsedModels(all);
+    setExpandedModels(new Set());
   };
 
   const expandAll = () => {
-    setCollapsedModels(new Set());
+    const all = new Set(rows.map((r) => r.modelId));
+    setExpandedModels(all);
+  };
+
+  // Export visible (filtered) rows as JSON — client-side, no backend needed.
+  const handleExportJson = () => {
+    const blob = new Blob([JSON.stringify(filteredRows, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rate-limits-${providerId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Distinct connections for filter dropdown
@@ -492,6 +554,16 @@ export default function RateLimitsTable({ providerId }) {
             </Button>
             <Button size="sm" variant="secondary" icon="refresh" onClick={fetchRateLimits} disabled={loading}>
               {loading ? "..." : "Refresh"}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon="download"
+              onClick={handleExportJson}
+              disabled={rows.length === 0}
+              title="Exportă rândurile vizibile (filtrate) ca JSON"
+            >
+              Export
             </Button>
           </div>
         </div>
@@ -797,7 +869,7 @@ export default function RateLimitsTable({ providerId }) {
             const firstLimits = modelRows[0]?.limits || {};
             const isEditingThisModel = editingModelLimits === modelId;
             const modelLabel = MODEL_LABELS[modelId] || modelId;
-            const isCollapsed = collapsedModels.has(modelId);
+            const isExpanded = expandedModels.has(modelId);
 
             const anyManualBlocked = modelRows.some((r) => r.manualBlockUntil && r.manualBlockUntil > currentTime);
             const allManualBlocked = modelRows.length > 0 && modelRows.every(
@@ -807,7 +879,10 @@ export default function RateLimitsTable({ providerId }) {
             const all429Blocked = modelRows.length > 0 && modelRows.every(
               (r) => r.rateLimitedUntil && r.rateLimitedUntil > currentTime
             );
-            const allBlocked = modelRows.length > 0 && modelRows.every(
+            // Unblock All must appear as soon as ANY row is blocked — blockAllModel
+            // only blocks active connections, so inactive rows break the old .every() check
+            // and the button never showed.
+            const allBlocked = modelRows.some(
               (r) => (r.manualBlockUntil && r.manualBlockUntil > currentTime) || (r.rateLimitedUntil && r.rateLimitedUntil > currentTime)
             );
             const anyRpdExhausted = modelRows.some((r) => Number.isFinite(r.limits.rpd) && r.rpd.used >= r.limits.rpd);
@@ -824,7 +899,7 @@ export default function RateLimitsTable({ providerId }) {
                     onClick={() => toggleModelCollapse(modelId)}
                   >
                     <span className="material-symbols-outlined text-[18px] text-text-muted transition-transform duration-150">
-                      {isCollapsed ? "chevron_right" : "expand_more"}
+                      {isExpanded ? "expand_more" : "chevron_right"}
                     </span>
                     <span className="font-mono text-xs font-bold text-text-main truncate">
                       {modelLabel}
@@ -840,8 +915,6 @@ export default function RateLimitsTable({ providerId }) {
                       <Badge variant="warning" size="sm" dot>Blocat manual</Badge>
                     ) : all429Blocked ? (
                       <Badge variant="error" size="sm" dot>Toate 429</Badge>
-                    ) : allBlocked ? (
-                      <Badge variant="error" size="sm" dot>Toate blocate</Badge>
                     ) : anyManualBlocked ? (
                       <Badge variant="warning" size="sm" dot>Unele blocate manual</Badge>
                     ) : any429Blocked ? (
@@ -983,7 +1056,7 @@ export default function RateLimitsTable({ providerId }) {
                 )}
 
                 {/* Per-Key Table / List */}
-                {!isCollapsed && (
+                {isExpanded && (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead>
@@ -992,6 +1065,8 @@ export default function RateLimitsTable({ providerId }) {
                           <th className="px-3 py-2">RPM (1m)</th>
                           <th className="px-3 py-2">TPM (1m)</th>
                           <th className="px-3 py-2">RPD (Zilnic)</th>
+                          <th className="px-3 py-2" title="Număr real de erori 429 primite de la upstream pe această cheie+model">429</th>
+                          <th className="px-3 py-2" title="Ultima actualizare a contoarelor (ultimul request / 429 / test)">Last Check</th>
                           <th className="px-3 py-2">Status</th>
                           <th className="px-3 py-2">Blocaj / Cooldown</th>
                           <th className="px-3.5 py-2 text-right">Acțiuni</th>
@@ -1068,6 +1143,7 @@ export default function RateLimitsTable({ providerId }) {
                                     >
                                       {row.rpm.used} / {fmtLimit(row.limits.rpm)}
                                     </span>
+                                    <DiscoveredHint value={row.discovery?.rpmLimit} />
                                     {!compactView && (
                                       <MiniProgressBar used={row.rpm.used} limit={row.limits.rpm} />
                                     )}
@@ -1111,6 +1187,7 @@ export default function RateLimitsTable({ providerId }) {
                                     >
                                       {fmtTokens(row.tpm.used)} / {fmtTokens(row.limits.tpm)}
                                     </span>
+                                    <DiscoveredHint value={row.discovery?.tpmLimit} />
                                     {!compactView && (
                                       <MiniProgressBar used={row.tpm.used} limit={row.limits.tpm} />
                                     )}
@@ -1154,6 +1231,7 @@ export default function RateLimitsTable({ providerId }) {
                                     >
                                       {row.rpd.used} / {fmtLimit(row.limits.rpd)}
                                     </span>
+                                    <DiscoveredHint value={row.discovery?.rpdLimit} />
                                     {!compactView && (
                                       <MiniProgressBar used={row.rpd.used} limit={row.limits.rpd} />
                                     )}
@@ -1161,24 +1239,61 @@ export default function RateLimitsTable({ providerId }) {
                                 )}
                               </td>
 
+                              {/* 429 Column (real upstream 429 hits) */}
+                              <td className="px-3 py-2 font-mono" title="Erori 429 reale de la upstream">
+                                {(row.count429 || 0) > 0 ? (
+                                  <span className="text-red-500 font-semibold">{row.count429}</span>
+                                ) : (
+                                  <span className="text-text-muted">0</span>
+                                )}
+                              </td>
+
+                              {/* Last Check Column */}
+                              <td className="px-3 py-2 font-mono text-[11px] text-text-muted whitespace-nowrap" title={row.lastCheck || "Fără activitate înregistrată"}>
+                                {fmtLastCheck(row.lastCheck, currentTime)}
+                              </td>
+
                               {/* Status Column */}
                               <td className="px-3 py-2">
                                 <StatusBadge row={row} currentTime={currentTime} />
                               </td>
 
-                              {/* Blocaj / Cooldown Column */}
+                              {/* Blocaj / Cooldown Column — lacătul deblocării manuale trăiește aici, nu la listarea cheii */}
                               <td className="px-3 py-2">
                                 <CooldownBadge
                                   rateLimitedUntil={row.rateLimitedUntil}
                                   manualBlockUntil={row.manualBlockUntil}
                                   currentTime={currentTime}
-                                  onUnblock={() => handleUnblockKey(row)}
+                                  onUnblock429={() => handleUnblockKey(row, "unblock429")}
+                                  onUnblockManual={() => handleUnblockKey(row, "unblockManual")}
                                 />
+                                {row.manualBlockUntil && row.manualBlockUntil > currentTime && onUnlockConnectionLocks && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUnblockKey(row, "unblockManual")}
+                                    className="ml-1.5 inline-flex items-center gap-0.5 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"
+                                    title={`Deblochează blocajul manual pentru modelul ${row.modelId}`}
+                                  >
+                                    <span className="material-symbols-outlined text-[11px]">lock_open</span>
+                                    Deblochează
+                                  </button>
+                                )}
                               </td>
 
                               {/* Actions Column */}
                               <td className="px-3.5 py-2 text-right">
                                 <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTestKey(row)}
+                                    disabled={testingKey === `${row.keyId}:${row.modelId}`}
+                                    className="rounded p-1 text-text-muted hover:bg-surface-2 hover:text-primary disabled:opacity-50"
+                                    title={`Testează modelul ${row.modelId} cu cheia ${row.connectionName}`}
+                                  >
+                                    <span className="material-symbols-outlined text-[15px]">
+                                      {testingKey === `${row.keyId}:${row.modelId}` ? "progress_activity" : "science"}
+                                    </span>
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => {

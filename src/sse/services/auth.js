@@ -100,7 +100,8 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
         if (usage) {
           if (limits.rpd !== Infinity && usage.rpd.used >= limits.rpd) continue;
           if (limits.rpm !== Infinity && usage.rpm.used >= limits.rpm) continue;
-          if (limits.tpm !== Infinity && usage.tpm.used >= limits.tpm) continue;
+          const estimatedTokens = options?.estimatedTokens || 0;
+          if (limits.tpm !== Infinity && (usage.tpm.used + estimatedTokens) > limits.tpm) continue;
         }
       }
       // Antigravity: skip if live quota exhausted for this model

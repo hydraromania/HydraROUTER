@@ -40,6 +40,9 @@ function buildTransformStream({ provider, sourceFormat, targetFormat, userAgent,
   return createPassthroughStreamWithLogger(provider, reqLogger, model, connectionId, body, onStreamComplete, apiKey);
 }
 
+import { getModelRateLimits } from "../../config/modelRateLimits.js";
+import { parseModel } from "../../services/model.js";
+
 /**
  * Handle streaming response — pipe provider SSE through transform stream to client.
  */
@@ -85,7 +88,8 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
   // Responses passthrough: synthesize response.failed + [DONE] if the stream aborts/stalls before a terminal event
   const isResponsesPassthrough = sourceFormat === FORMATS.OPENAI_RESPONSES && targetFormat === FORMATS.OPENAI_RESPONSES;
   const onAbortTerminal = isResponsesPassthrough ? buildAbortedResponsesTerminalBytes : null;
-  const stallTimeoutMs = PROVIDERS[provider]?.stallTimeoutMs || STREAM_STALL_TIMEOUT_MS;
+  const modelLimits = getModelRateLimits(provider, model);
+  const stallTimeoutMs = modelLimits?.timeoutMs || PROVIDERS[provider]?.stallTimeoutMs || STREAM_STALL_TIMEOUT_MS;
   const transformedBody = pipeWithDisconnect(providerResponse, transformStream, streamController, onAbortTerminal, stallTimeoutMs);
 
   saveRequestDetail(buildRequestDetail({

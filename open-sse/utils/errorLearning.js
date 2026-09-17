@@ -22,6 +22,12 @@ const KNOWN_ERROR_PATTERNS = [
     autoCorrect: "sanitizeFunctionNames",
   },
   {
+    name: "gemini_thinking_level_minimal",
+    match: (message) => /thinking level minimal is not supported/i.test(message),
+    providers: ["gemini", "gemini-cli", "antigravity", "vertex", "vertex-partner"],
+    autoCorrect: "adjustThinkingLevelMinimalToLow",
+  },
+  {
     name: "claude_tool_use_without_result",
     match: (message) => /tool_use.*without.*tool_result|tool_result.*missing|expected tool_result/i.test(message),
     providers: ["anthropic", "claude"],
@@ -489,10 +495,48 @@ function removeEmptyAssistant(body, format) {
   return { body: correctedBody, corrected };
 }
 
+function adjustThinkingLevelMinimalToLow(body, format) {
+  if (!body) return { body, corrected: false };
+  const correctedBody = { ...body };
+  let corrected = false;
+
+  // Gemini direct JSON format
+  if (correctedBody.generationConfig?.thinkingConfig) {
+    if (correctedBody.generationConfig.thinkingConfig.thinkingLevel?.toLowerCase?.() === "minimal") {
+      correctedBody.generationConfig.thinkingConfig.thinkingLevel = "low";
+      correctedBody.generationConfig.thinkingConfig.includeThoughts = true;
+      corrected = true;
+    }
+  }
+
+  // Nested request.generationConfig format
+  if (correctedBody.request?.generationConfig?.thinkingConfig) {
+    if (correctedBody.request.generationConfig.thinkingConfig.thinkingLevel?.toLowerCase?.() === "minimal") {
+      correctedBody.request.generationConfig.thinkingConfig.thinkingLevel = "low";
+      correctedBody.request.generationConfig.thinkingConfig.includeThoughts = true;
+      corrected = true;
+    }
+  }
+
+  // OpenAI / generic format with reasoning_effort or thinking
+  if (typeof correctedBody.reasoning_effort === "string" && correctedBody.reasoning_effort.toLowerCase() === "minimal") {
+    correctedBody.reasoning_effort = "low";
+    corrected = true;
+  }
+
+  if (correctedBody.thinking?.level?.toLowerCase?.() === "minimal") {
+    correctedBody.thinking.level = "low";
+    corrected = true;
+  }
+
+  return { body: correctedBody, corrected };
+}
+
 const AUTO_CORRECTORS = {
   removeTrailingModelTurn,
   removeEmptyContents,
   sanitizeFunctionNames,
+  adjustThinkingLevelMinimalToLow,
   removeOrphanToolUse,
   reduceMaxTokens,
   stripModelSuffix,

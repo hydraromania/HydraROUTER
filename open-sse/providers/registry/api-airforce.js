@@ -28,6 +28,11 @@ export default {
       "X-Title": "Endpoint Proxy",
     },
   },
+  rateLimits: {
+    rpm: 5,
+    tpm: 120000,
+    rpd: 100,
+  },
   models: [
     { id: "anthropic/claude-3.7-sonnet", name: "Claude 3.7 Sonnet (Free)", contextLength: 200000 },
     { id: "moonshot/kimi-k2.6", name: "Kimi K2.6 (Free)", contextLength: 262144 },

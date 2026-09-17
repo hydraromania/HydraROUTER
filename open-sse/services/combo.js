@@ -6,7 +6,7 @@ import { checkFallbackError, formatRetryAfter } from "./accountFallback.js";
 import { unavailableResponse } from "../utils/error.js";
 import { getCapabilitiesForModel } from "../providers/capabilities.js";
 import { extractTextContent } from "../translator/formats/gemini.js";
-import { filterModelsByContext, modelContextLength } from "../providers/models/schema.js";
+import { filterModelsByContext } from "../providers/models/schema.js";
 import { getProviderModels } from "../config/providerModels.js";
 
 // Hard capabilities = input modalities; missing one drops request data (e.g. image
@@ -155,30 +155,46 @@ export function buildIdleProbeBody(body) {
   return probe;
 }
 
-async function probeIdleModel(handleSingleModel, body, modelStr, log) {
-  log.info("COMBO", `Probing idle nVidia model ${modelStr} (no success in last hour)`);
+export async function probeIdleModel(handleSingleModel, body, modelStr, log) {
+  log?.info?.("COMBO", `Probing idle nVidia model ${modelStr} (no success in last hour)`);
   let timer = null;
+  const abortController = new AbortController();
   try {
     const timeout = new Promise((res) => {
-      timer = setTimeout(() => res({ ok: false, timedOut: true }), NVIDIA_PROBE_TIMEOUT_MS);
+      timer = setTimeout(() => {
+        try { abortController.abort(); } catch {}
+        res({ ok: false, timedOut: true });
+      }, NVIDIA_PROBE_TIMEOUT_MS);
       timer?.unref?.();
     });
-    const probed = await Promise.race([
-      handleSingleModel(buildIdleProbeBody(body), modelStr).then(
-        (r) => {
-          if (r?.ok) recordModelSuccess(modelStr);
-          return { ok: !!r?.ok, res: r };
-        },
-        () => ({ ok: false }),
-      ),
-      timeout,
-    ]);
-    try { await probed.res?.clone?.()?.body?.cancel?.(); } catch {}
+
+    const probeBody = buildIdleProbeBody(body);
+    const probePromise = handleSingleModel(probeBody, modelStr, null, { signal: abortController.signal }).then(
+      async (r) => {
+        const isOk = !!r?.ok;
+        if (isOk) recordModelSuccess(modelStr);
+        // Explicitly drain or cancel response body to decouple connection and release socket
+        try {
+          if (r?.body) {
+            if (typeof r.body.cancel === "function") {
+              await r.body.cancel();
+            } else if (typeof r.body.destroy === "function") {
+              r.body.destroy();
+            }
+          }
+        } catch {}
+        return { ok: isOk, res: r };
+      },
+      () => ({ ok: false })
+    );
+
+    const probed = await Promise.race([probePromise, timeout]);
     return probed.ok === true;
   } catch {
     return false;
   } finally {
     if (timer) clearTimeout(timer);
+    try { abortController.abort(); } catch {}
   }
 }
 

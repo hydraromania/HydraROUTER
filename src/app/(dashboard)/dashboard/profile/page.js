@@ -772,7 +772,7 @@ export default function ProfilePage() {
                 <p className="text-sm text-text-muted">Running on your machine</p>
               </div>
             </div>
-            <div className="inline-flex p-1 rounded-lg bg-black/5 dark:bg-white/5 w-full sm:w-auto">
+            <div className="inline-flex p-1 rounded-lg bg-surface-2 w-full sm:w-auto">
               {["light", "dark", "system"].map((option) => (
                 <button
                   key={option}
@@ -781,7 +781,7 @@ export default function ProfilePage() {
                   className={cn(
                     "flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-md font-medium transition-all flex-1 sm:flex-initial",
                     theme === option
-                      ? "bg-white dark:bg-white/10 text-text-main shadow-sm"
+                      ? "bg-surface-2 text-text-main shadow-sm"
                       : "text-text-muted hover:text-text-main"
                   )}
                 >
@@ -968,14 +968,14 @@ export default function ProfilePage() {
               {/* SSO Protocol Switcher Tabs */}
               <div className="flex flex-col gap-2">
                 <label className="font-medium text-sm sm:text-base">SSO Protocol</label>
-                <div className="flex p-1 rounded-lg bg-black/5 dark:bg-white/5 border border-border">
+                <div className="flex p-1 rounded-lg bg-surface-2 border border-border">
                   <button
                     type="button"
                     onClick={() => setSsoTypeTab("saml")}
                     className={cn(
                       "flex-1 py-1.5 px-3 rounded-md font-medium text-xs sm:text-sm transition-all text-center",
                       ssoTypeTab === "saml"
-                        ? "bg-white dark:bg-white/10 text-text-main shadow-sm"
+                        ? "bg-surface-2 text-text-main shadow-sm"
                         : "text-text-muted hover:text-text-main"
                     )}
                   >
@@ -987,7 +987,7 @@ export default function ProfilePage() {
                     className={cn(
                       "flex-1 py-1.5 px-3 rounded-md font-medium text-xs sm:text-sm transition-all text-center",
                       ssoTypeTab === "oidc"
-                        ? "bg-white dark:bg-white/10 text-text-main shadow-sm"
+                        ? "bg-surface-2 text-text-main shadow-sm"
                         : "text-text-muted hover:text-text-main"
                     )}
                   >

@@ -18,6 +18,11 @@ export default {
     baseUrl: "https://bazaarlink.ai/api/v1/chat/completions",
     validateUrl: "https://bazaarlink.ai/api/v1/models",
   },
+  rateLimits: {
+    rpm: 5,
+    tpm: 120000,
+    rpd: 100,
+  },
   models: [
     { id: "auto:free", name: "Auto Free (Zero Cost)" },
     { id: "claude-opus-4.7", name: "Claude Opus 4.7", contextLength: 1000000 },

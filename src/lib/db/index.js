@@ -65,7 +65,7 @@ export {
 // Rate Limits
 export {
   getRateLimit, getAllRateLimits, getRateLimitsForProvider, upsertRateLimit, updateRpdCount, updateRpmCount,
-  updateTpmCount, updateRateLimitedUntil, updateManualBlockUntil, deleteRateLimit, cleanupExpiredRateLimits,
+  updateTpmCount, updateRateLimitedUntil, updateManualBlockUntil, increment429Count, recordQuotaDiscovery, deleteRateLimit, cleanupExpiredRateLimits,
 } from "./repos/rateLimitsRepo.js";
 
 // Request details

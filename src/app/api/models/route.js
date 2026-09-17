@@ -37,14 +37,27 @@ export async function GET() {
         };
       });
 
-    // Custom models ride along; their stored caps override the name heuristic
-    const seenFull = new Set(models.map((m) => m.fullModel));
+    // Custom models ride along; their stored caps override default caps
     const customModels = (await getCustomModels()).filter((m) => {
-      if (!m?.id || (m.kind || m.type || "llm") !== "llm") return false;
-      return !seenFull.has(`${m.providerAlias}/${m.id}`);
+      return m?.id && (m.kind || m.type || "llm") === "llm";
     });
+    const customMap = new Map();
+    for (const m of customModels) {
+      customMap.set(`${m.providerAlias}/${m.id}`, m);
+    }
+
+    // Apply custom caps overrides to existing AI_MODELS
+    for (const m of models) {
+      const custom = customMap.get(m.routedModel) || customMap.get(m.fullModel);
+      if (custom?.caps) {
+        m.caps = { ...m.caps, ...custom.caps };
+      }
+    }
+
+    const seenFull = new Set(models.map((m) => m.fullModel));
     for (const m of customModels) {
       const fullModel = `${m.providerAlias}/${m.id}`;
+      if (seenFull.has(fullModel)) continue;
       const c = getCapabilitiesForModel(m.providerAlias, m.id);
       models.push({
         provider: m.providerAlias,

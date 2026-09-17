@@ -104,10 +104,7 @@ export default function UsageChart({ period = "7d" }) {
       </div>
 
       {loading ? (
-        <div className="h-56 flex flex-col items-center justify-center gap-2 text-text-muted text-sm">
-          <span className="material-symbols-outlined text-[28px] animate-spin text-brand-500">progress_activity</span>
-          <span>Loading analytics chart...</span>
-        </div>
+        <div className="skeleton-shimmer h-56 rounded-xl" />
       ) : !hasData ? (
         <div className="h-56 flex flex-col items-center justify-center gap-2 text-text-muted text-sm rounded-xl border border-dashed border-border/60 bg-bg-subtle/20">
           <span className="material-symbols-outlined text-[28px] opacity-40">query_stats</span>
@@ -143,11 +140,12 @@ export default function UsageChart({ period = "7d" }) {
                 width={56}
               />
               <Tooltip
+                cursor={{ stroke: viewMode === "tokens" ? "#E56A4A" : "#f59e0b", strokeDasharray: "4 4", strokeOpacity: 0.5 }}
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length) {
                     const val = payload[0].value;
                     return (
-                      <div className="rounded-xl border border-border bg-surface/95 px-3.5 py-2.5 shadow-xl backdrop-blur-md">
+                      <div className="animate-pop-in relative rounded-xl border border-border bg-surface/95 px-3.5 py-2.5 shadow-xl backdrop-blur-md">
                         <div className="text-[11px] font-semibold text-text-muted mb-1">{label}</div>
                         <div className="flex items-center gap-2">
                           <span

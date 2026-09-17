@@ -252,6 +252,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
               </Badge>
             )}
             {isCooldown && connection.isActive !== false && <CooldownTimer until={modelLockUntil} />}
+            {/* ponytail: deblocarea modelelor e doar jos în tabelul RPD/TPM/RPM, nu la listarea cheii. */}
             {connection.lastError && connection.isActive !== false && (
               <span className="max-w-full truncate text-xs text-red-500 sm:max-w-[300px]" title={connection.lastError}>
                 {connection.lastError}

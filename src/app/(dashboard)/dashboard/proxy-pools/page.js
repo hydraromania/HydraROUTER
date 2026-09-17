@@ -626,7 +626,7 @@ export default function ProxyPoolsPage() {
             </Button>
 
             {showRelayMenu && (
-              <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-xl border border-black/10 bg-white p-1 shadow-xl dark:border-white/10 dark:bg-zinc-900 sm:left-auto sm:right-0">
+              <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-xl border border-border bg-surface p-1 shadow-xl sm:left-auto sm:right-0">
                 <button
                   onClick={() => {
                     openCloudflareModal();
@@ -836,7 +836,7 @@ export default function ProxyPoolsPage() {
               value={batchImportText}
               onChange={(e) => setBatchImportText(e.target.value)}
               placeholder={"http://user:pass@127.0.0.1:7897\n127.0.0.1:7897:user:pass"}
-              className="w-full min-h-[180px] py-2 px-3 text-sm text-text-main bg-white dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all"
+              className="w-full min-h-[180px] py-2 px-3 text-sm text-text-main bg-surface-2 border border-border rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all"
             />
             <p className="text-xs text-text-muted mt-1">
               Supported formats: protocol://user:pass@host:port, host:port:user:pass
@@ -972,7 +972,7 @@ export default function ProxyPoolsPage() {
         onClose={closeDenoModal}
       >
         <div className="flex flex-col gap-4">
-          <div className="rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-3 flex flex-col gap-1.5">
+          <div className="rounded-lg bg-surface-2 border border-border p-3 flex flex-col gap-1.5">
             <p className="text-sm text-text-main font-medium">What is Deno Relay?</p>
             <p className="text-xs text-text-muted">
               Deploys a relay worker to Deno Deploy&apos;s global edge network. All AI provider requests are forwarded through Deno&apos;s edge, masking your real IP.
@@ -984,7 +984,7 @@ export default function ProxyPoolsPage() {
               <li>Support up to 20 active apps & 50 custom domains</li>
               <li>Deploy multiple relays for maximum IP diversity</li>
             </ul>
-            <div className="mt-2 pt-2 border-t border-black/10 dark:border-white/10 text-xs text-text-muted">
+            <div className="mt-2 pt-2 border-t border-border text-xs text-text-muted">
               <p className="font-medium text-text-main mb-1">How to generate API token:</p>
               <ol className="list-decimal pl-4 space-y-0.5">
                 <li>Go to <b>console.deno.com</b></li>

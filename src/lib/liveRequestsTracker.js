@@ -111,6 +111,7 @@ function scheduleBroadcast() {
  * @param {boolean} [params.stream]
  * @param {string} [params.userAgent]
  * @param {string} [params.clientIp]
+ * @param {string} [params.sessionId]
  * @param {string|object} [params.proxy]
  */
 export function trackRequestStart({
@@ -125,6 +126,7 @@ export function trackRequestStart({
   stream = false,
   userAgent = null,
   clientIp = null,
+  sessionId = null,
   messagesCount = 0,
   proxy = null,
   body = null,
@@ -162,6 +164,7 @@ export function trackRequestStart({
     stream: !!stream,
     userAgent: userAgent || null,
     clientIp: clientIp || null,
+    sessionId: sessionId || null,
     messagesCount: messagesCount || 0,
     proxy: proxyInfo,
     payload: sanitizePayloadForLiveView(body),

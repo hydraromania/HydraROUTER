@@ -2,12 +2,13 @@ import { getModelRateLimits, getRpdResetTime } from "../config/modelRateLimits.j
 import {
   getRateLimit,
   getRateLimitsForProvider,
-  upsertRateLimit,
   updateRpdCount,
   updateRpmCount,
   updateTpmCount,
   updateRateLimitedUntil,
   updateManualBlockUntil,
+  increment429Count,
+  recordQuotaDiscovery,
   deleteRateLimit,
   cleanupExpiredRateLimits
 } from "@/lib/db/index.js";
@@ -58,6 +59,9 @@ class RateLimitTracker {
       let tpmResetAt = now + 60 * 1000;
       let rateLimitedUntil = 0;
       let manualBlockUntil = 0;
+      let count429 = 0;
+      let updatedAt = null;
+      let discovery = null;
 
       try {
         const persisted = await getRateLimit(keyId, modelId, providerId);
@@ -80,6 +84,11 @@ class RateLimitTracker {
           if (persisted.manualBlockUntil > now) {
             manualBlockUntil = persisted.manualBlockUntil;
           }
+          count429 = persisted.count429 || 0;
+          updatedAt = persisted.updatedAt || null;
+          discovery = (persisted.discoveredRpm != null || persisted.discoveredTpm != null || persisted.discoveredRpd != null || persisted.quotaMessage)
+            ? { rpmLimit: persisted.discoveredRpm ?? null, tpmLimit: persisted.discoveredTpm ?? null, rpdLimit: persisted.discoveredRpd ?? null, project: persisted.quotaProject ?? null, message: persisted.quotaMessage ?? null, at: persisted.quotaAt || 0, retryAfterSec: persisted.lastRetryAfterSec || 0 }
+            : null;
         }
       } catch (e) {
         console.warn("[RATE_LIMIT_TRACKER] Failed to load persisted limits:", e.message);
@@ -93,6 +102,9 @@ class RateLimitTracker {
         limits,
         rateLimitedUntil,
         manualBlockUntil,
+        count429,
+        updatedAt,
+        discovery,
       });
     }
     const tracker = keyTracker.get(modelId);
@@ -198,17 +210,18 @@ class RateLimitTracker {
   }
 
   async getUsage(keyId, modelId, providerId) {
-    await this._ensureDbInitialized();
-    const keyTracker = this.trackers.get(keyId);
-    if (!keyTracker) return null;
-    const tracker = keyTracker.get(modelId);
+    if (!keyId || keyId === "noauth") return null;
+    const tracker = await this.getModelTracker(keyId, modelId, providerId);
     if (!tracker) return null;
 
     const now = Date.now();
+    const rpmUsed = tracker.rpm.resetAt > now ? tracker.rpm.count : 0;
+    const tpmUsed = tracker.tpm.resetAt > now ? tracker.tpm.count : 0;
+    const rpdUsed = tracker.rpd.resetAt > now ? tracker.rpd.count : 0;
     return {
-      rpm: { used: tracker.rpm.count, limit: tracker.limits.rpm, resetAt: tracker.rpm.resetAt, remaining: Math.max(0, tracker.limits.rpm - tracker.rpm.count) },
-      tpm: { used: tracker.tpm.count, limit: tracker.limits.tpm, resetAt: tracker.tpm.resetAt, remaining: Math.max(0, tracker.limits.tpm - tracker.tpm.count) },
-      rpd: { used: tracker.rpd.count, limit: tracker.limits.rpd, resetAt: tracker.rpd.resetAt, remaining: Math.max(0, tracker.limits.rpd - tracker.rpd.count) },
+      rpm: { used: rpmUsed, limit: tracker.limits.rpm, resetAt: tracker.rpm.resetAt, remaining: Math.max(0, tracker.limits.rpm - rpmUsed) },
+      tpm: { used: tpmUsed, limit: tracker.limits.tpm, resetAt: tracker.tpm.resetAt, remaining: Math.max(0, tracker.limits.tpm - tpmUsed) },
+      rpd: { used: rpdUsed, limit: tracker.limits.rpd, resetAt: tracker.rpd.resetAt, remaining: Math.max(0, tracker.limits.rpd - rpdUsed) },
     };
   }
 
@@ -233,6 +246,17 @@ class RateLimitTracker {
           rpd: { used: rpdUsed, limit: limits.rpd, remaining: Math.max(0, limits.rpd - rpdUsed) },
           rateLimitedUntil: row.rateLimitedUntil > now ? row.rateLimitedUntil : 0,
           manualBlockUntil: row.manualBlockUntil > now ? row.manualBlockUntil : 0,
+          count429: row.count429 || 0,
+          updatedAt: row.updatedAt || null,
+          discovery: {
+            rpmLimit: row.discoveredRpm ?? null,
+            tpmLimit: row.discoveredTpm ?? null,
+            rpdLimit: row.discoveredRpd ?? null,
+            project: row.quotaProject ?? null,
+            message: row.quotaMessage ?? null,
+            at: row.quotaAt || 0,
+            retryAfterSec: row.lastRetryAfterSec || 0,
+          },
         });
       }
     } catch (e) {
@@ -249,6 +273,9 @@ class RateLimitTracker {
           rpd: { used: tracker.rpd.count, limit: tracker.limits.rpd, remaining: Math.max(0, tracker.limits.rpd - tracker.rpd.count) },
           rateLimitedUntil: tracker.rateLimitedUntil,
           manualBlockUntil: tracker.manualBlockUntil || 0,
+          count429: tracker.count429 || 0,
+          updatedAt: tracker.updatedAt || null,
+          discovery: tracker.discovery || null,
         });
       }
     }
@@ -287,18 +314,49 @@ class RateLimitTracker {
     };
   }
 
-  async recordRateLimitHit(keyId, modelId, providerId) {
+  // quotaInfo: passive discovery from a real 429 body {kind,model,limit,retryAfterSec,project,message}.
+  // RPD violation → RPD row marked exhausted on this key+model until next RPD reset.
+  // RPM/TPM violation or generic 429 → sliding window cooldown (retryAfterSec or 60s), NOT until midnight.
+  async recordRateLimitHit(keyId, modelId, providerId, quotaInfo = null) {
     if (!keyId || keyId === "noauth") return { rateLimitedUntil: 0 };
     const tracker = await this.getModelTracker(keyId, modelId, providerId);
-    const now = Date.now();
     const limits = getModelRateLimits(providerId, modelId);
     const rpdReset = getRpdResetTime(limits.rpdResetHour, limits.resetTz);
-    tracker.rateLimitedUntil = rpdReset.getTime();
+
+    const isRpd = quotaInfo?.kind === "rpd";
+    if (isRpd) {
+      tracker.rateLimitedUntil = rpdReset.getTime();
+    } else {
+      const waitSec = Math.max(60, Number(quotaInfo?.retryAfterSec) || 60);
+      tracker.rateLimitedUntil = Date.now() + waitSec * 1000;
+    }
+
     await updateRateLimitedUntil(keyId, modelId, providerId, tracker.rateLimitedUntil);
-    return { rateLimitedUntil: tracker.rateLimitedUntil };
+    // Real-data 429 counter for the quota monitor (persisted, never reset by windows).
+    try {
+      tracker.count429 = await increment429Count(keyId, modelId, providerId);
+    } catch {}
+    // Passive quota discovery: persist real violated limits, never documented defaults.
+    if (quotaInfo && (quotaInfo.kind || quotaInfo.limit != null)) {
+      try {
+        tracker.discovery = await recordQuotaDiscovery(keyId, quotaInfo.model || modelId, providerId, quotaInfo);
+      } catch {}
+      if (quotaInfo.retryAfterSec) tracker.lastRetryAfterSec = quotaInfo.retryAfterSec;
+      // RPD verdict from Google: set local used counter to the discovered max so the
+      // row reads 20/20 (or 10/10) and routing treats this key+model as exhausted.
+      if (quotaInfo.kind === "rpd" && quotaInfo.limit != null) {
+        try {
+          const { updateRpdCount } = await import("@/lib/db/index.js");
+          await updateRpdCount(keyId, quotaInfo.model || modelId, providerId, quotaInfo.limit, rpdReset.getTime());
+        } catch {}
+      }
+    } else if (quotaInfo?.retryAfterSec) {
+      tracker.lastRetryAfterSec = quotaInfo.retryAfterSec;
+    }
+    return { rateLimitedUntil: tracker.rateLimitedUntil, count429: tracker.count429 || 0 };
   }
 
-  async isRateLimited(keyId, modelId, providerId) {
+  async isRateLimited(keyId, modelId, _providerId) {
     if (!keyId || keyId === "noauth") return false;
     await this._ensureDbInitialized();
     const keyTracker = this.trackers.get(keyId);
@@ -316,6 +374,16 @@ class RateLimitTracker {
     const limits = getModelRateLimits(providerId, modelId);
     const rpdReset = getRpdResetTime(limits.rpdResetHour, limits.resetTz);
     tracker.manualBlockUntil = rpdReset.getTime();
+    await updateManualBlockUntil(keyId, modelId, providerId, tracker.manualBlockUntil);
+    return { manualBlockUntil: tracker.manualBlockUntil };
+  }
+
+  async recordPermanentBlock(keyId, modelId, providerId) {
+    if (!keyId || keyId === "noauth") return { manualBlockUntil: 0 };
+    const tracker = await this.getModelTracker(keyId, modelId, providerId);
+    // Definitive block (until manual unlock): far-future timestamp, persisted in DB.
+    // ponytail: no separate "reason" column. Upgrade path: add blockReason to rateLimits row.
+    tracker.manualBlockUntil = 4102444800000; // 2100-01-01
     await updateManualBlockUntil(keyId, modelId, providerId, tracker.manualBlockUntil);
     return { manualBlockUntil: tracker.manualBlockUntil };
   }

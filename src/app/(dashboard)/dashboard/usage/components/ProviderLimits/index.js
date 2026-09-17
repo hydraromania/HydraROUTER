@@ -1484,7 +1484,7 @@ export default function ProviderLimits() {
                     <span>{resetCreditsState.data.credits.length} reset credit{resetCreditsState.data.credits.length === 1 ? "" : "s"}</span>
                     <span>{resetCreditsState.data.availableCount ?? 0} available</span>
                   </div>
-                  <div className="overflow-x-auto rounded-xl border border-black/10 dark:border-white/10">
+                  <div className="overflow-x-auto rounded-xl border border-border">
                     <table className="w-full min-w-[560px] text-left text-sm">
                       <thead className="bg-black/[0.03] text-xs uppercase tracking-wide text-text-muted dark:bg-white/[0.04]">
                         <tr>

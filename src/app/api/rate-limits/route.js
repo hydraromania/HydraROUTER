@@ -3,7 +3,7 @@ import { getProviderConnections } from "@/models";
 import { getSettings, updateSettings } from "@/lib/db/repos/settingsRepo.js";
 import { getRateLimitsForProvider } from "@/lib/db/index.js";
 import { rateLimitTracker } from "open-sse/services/rateLimitTracker.js";
-import { getModelRateLimits, hasRateLimitConfig, getRpdResetTime, getConfiguredModelsForProvider, setModelLimitOverrides, getModelLimitOverrides, DEFAULT_RESET_TZ } from "open-sse/config/modelRateLimits.js";
+import { getModelRateLimits, hasRateLimitConfig, getRpdResetTime, getConfiguredModelsForProvider, setModelLimitOverrides, DEFAULT_RESET_TZ } from "open-sse/config/modelRateLimits.js";
 import { getBlockedModels, unblockModel } from "open-sse/services/combo.js";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +58,8 @@ export async function GET(request) {
     const connections = await getProviderConnections();
     const providerConnections = connections
       .filter((c) => c.provider === providerId)
-      .map((c) => ({ id: c.id, name: c.name, isActive: c.isActive }));
+      // Mask: never expose full API keys — connectionName is a display label only.
+      .map((c) => ({ id: c.id, name: c.name || `cheie ${String(c.id).slice(0, 4)}••••`, isActive: c.isActive }));
 
     const modelIds = modelId ? [modelId] : await getVisibleModelIds(providerId);
 
@@ -94,6 +95,9 @@ export async function GET(request) {
           rpd: t?.rpd ?? { used: 0, limit: limits.rpd, remaining: limits.rpd },
           rateLimitedUntil: t?.rateLimitedUntil || 0,
           manualBlockUntil: t?.manualBlockUntil || 0,
+          count429: t?.count429 || 0,
+          lastCheck: t?.updatedAt || null,
+          discovery: t?.discovery || null,
         });
       }
     }
@@ -207,12 +211,19 @@ export async function POST(request) {
       return NextResponse.json({ success: true });
     }
 
-    // 5. Unblock 429 cooldown for a key & model
+    // 5. Unblock 429 cooldown or manual block for a key & model
     if (action === "unblock429") {
       if (!keyId || !model) {
         return NextResponse.json({ error: "KeyId and model are required" }, { status: 400 });
       }
       await rateLimitTracker.clearCooldown(keyId, model, provider);
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === "unblockManual") {
+      if (!keyId || !model) {
+        return NextResponse.json({ error: "KeyId and model are required" }, { status: 400 });
+      }
       await rateLimitTracker.clearManualBlock(keyId, model, provider);
       return NextResponse.json({ success: true });
     }
@@ -228,20 +239,22 @@ export async function POST(request) {
     if (action === "blockAllModel" || action === "unblockAllModel") {
       if (!model) return NextResponse.json({ error: "Model is required" }, { status: 400 });
 
-      // Get all active connections for this provider to block/unblock all key IDs
       const conns = await getProviderConnections();
-      const activeConns = conns.filter(c => c.provider === provider && c.isActive !== false);
+      const providerConns = conns.filter(c => c.provider === provider);
 
-      for (const conn of activeConns) {
+      for (const conn of providerConns) {
         if (action === "blockAllModel") {
+          // Block only active connections — inactive ones don't route traffic.
+          if (conn.isActive === false) continue;
           await rateLimitTracker.recordManualBlock(conn.id, model, provider);
         } else {
+          // Unblock clears every row (active or not) so no stale block survives.
           await rateLimitTracker.clearManualBlock(conn.id, model, provider);
           // Also clear any 429 cooldown so "unblock all" completely frees the model
           await rateLimitTracker.clearCooldown(conn.id, model, provider);
         }
       }
-      return NextResponse.json({ success: true, count: activeConns.length });
+      return NextResponse.json({ success: true, count: providerConns.length });
     }
 
     // 7. Reset all counters for a key & model

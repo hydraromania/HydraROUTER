@@ -10,7 +10,7 @@ import {
 } from "../services/auth.js";
 import { getResponseFormatOverrideForApiKey } from "@/lib/apiKeyModelFilter.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
-import { isGeminiReroutedToNvidia, isGeminiProvider, findNvidiaComboTarget, recordGemini429Hit, recordGeminiSuccess } from "../services/geminiReroute.js";
+import { isGeminiReroutedToNvidia, isGeminiProvider, findNvidiaComboTarget, findGeminiFallbackComboTarget, recordGemini429Hit, recordGeminiSuccess } from "../services/geminiReroute.js";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
@@ -18,7 +18,9 @@ import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
 import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
 import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
-import { handleComboChat, handleFusionChat, detectRequiredCapabilities, recordModelSuccess } from "open-sse/services/combo.js";
+import { handleComboChat, handleFusionChat, detectRequiredCapabilities, recordModelSuccess, isModelBlocked } from "open-sse/services/combo.js";
+import { isModelLockActive } from "open-sse/services/accountFallback.js";
+import { getGeminiChainFrom, recordGemini404Strike, resetGemini404Strikes } from "open-sse/config/geminiChain.js";
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -28,9 +30,8 @@ import { updateProviderCredentials, checkAndRefreshToken } from "../services/tok
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
 import { checkAndRecordRateLimit, rateLimitTracker } from "open-sse/services/rateLimitTracker.js";
-import { filterModelsByContext } from "open-sse/providers/models/schema.js";
+import { parseGoogleQuotaError } from "open-sse/services/googleQuota.js";
 import { getProviderModels } from "open-sse/config/providerModels.js";
-import { trackRequestStart, trackRequestUpdate, trackRequestEnd, trackRequestError } from "@/lib/liveRequestsTracker.js";
 
 
 /**
@@ -236,7 +237,17 @@ export async function handleChat(request, clientRawRequest = null) {
     });
   }
 
-  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey);
+  const singleRes = await handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey);
+  if (!singleRes.ok && (singleRes.status === 504 || singleRes.status === 503 || singleRes.status === 502)) {
+    const fallbackModel = await findAnyFallbackModel(body, [modelStr]);
+    if (fallbackModel) {
+      log.warn("FALLBACK", `Model "${modelStr}" failed (${singleRes.status}). Auto fallback → ${fallbackModel}`);
+      const fallbackRes = await handleSingleModelChat(body, fallbackModel, clientRawRequest, request, apiKey);
+      if (fallbackRes.ok) return fallbackRes;
+    }
+  }
+
+  return singleRes;
 }
 
 /**
@@ -298,6 +309,197 @@ async function findAnyFallbackModel(body, excludeModels = []) {
 }
 
 /**
+ * Gemini fixed chain: same-key cascade first, next key after.
+ * For each key, try chain models top-down (skip exhausted/blocked per key+model).
+ * Chain exhausted on this key → next key. Auth errors (401/402/403/404) → next key.
+ */
+async function handleGeminiChain(body, provider, model, clientRawRequest = null, request = null, apiKey = null, pinnedConnectionId = null) {
+  const chain = getGeminiChainFrom(model);
+  const estimatedTokens = estimateRequestTokens(body);
+  const providerModelsMap = getProviderModels(provider) || [];
+  const userAgent = request?.headers?.get("user-agent") || "";
+  const excludeConnectionIds = new Set();
+  let lastError = null;
+  let lastStatus = null;
+
+  while (true) {
+    const credentials = await getProviderCredentials(provider, excludeConnectionIds, null, { estimatedTokens, preferredConnectionId: pinnedConnectionId });
+
+    if (!credentials || credentials.allRateLimited) {
+      if (credentials?.allRateLimited) {
+        const errorMsg = lastError || credentials.lastError || "Unavailable";
+        log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`);
+        return unavailableResponse(HTTP_STATUS.SERVICE_UNAVAILABLE, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman);
+      }
+      if (excludeConnectionIds.size === 0) {
+        log.warn("AUTH", `No active credentials for provider: ${provider}`);
+        return errorResponse(HTTP_STATUS.NOT_FOUND, `No active credentials for provider: ${provider}`);
+      }
+      return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All Gemini keys exhausted");
+    }
+
+    const refreshedCredentials = await checkAndRefreshToken(provider, credentials);
+    let keyFailed = false;
+
+    for (const chainModel of chain) {
+      const fullModel = `${provider}/${chainModel}`;
+      if (isModelBlocked(fullModel)) {
+        log.warn("GEMINI_CHAIN", `${fullModel} blocked, skip on key ${credentials.connectionName}`);
+        continue;
+      }
+      if (isModelLockActive(credentials._connection || {}, chainModel)) continue;
+      if (await rateLimitTracker.isRateLimited(credentials.connectionId, chainModel, provider)) continue;
+      const def = providerModelsMap.find((m) => m.id === chainModel);
+      if (def?.contextLength && estimatedTokens > def.contextLength) continue;
+
+      const rateLimitCheck = await checkAndRecordRateLimit(credentials.connectionId, fullModel, estimatedTokens);
+      if (!rateLimitCheck.allowed) {
+        lastError = rateLimitCheck.message;
+        lastStatus = HTTP_STATUS.TOO_MANY_REQUESTS;
+        continue;
+      }
+
+      const chatSettings = await getSettings();
+      const providerThinking = (chatSettings.providerThinking || {})[provider] || null;
+      const ratePacing = (chatSettings.ratePacing || {})[provider] || null;
+      const stripTools = !!((chatSettings.toolStripProviders || {})[provider]);
+      const responseFormatOverride = await getResponseFormatOverrideForApiKey(apiKey);
+      const result = await handleChatCore({
+        body: { ...body, model: fullModel },
+        modelInfo: { provider, model: chainModel },
+        credentials: refreshedCredentials,
+        log,
+        clientRawRequest,
+        connectionId: credentials.connectionId,
+        userAgent,
+        apiKey,
+        ccFilterNaming: !!chatSettings.ccFilterNaming,
+        rtkEnabled: !!chatSettings.rtkEnabled,
+        headroomEnabled: !!chatSettings.headroomEnabled,
+        headroomUrl: chatSettings.headroomUrl || DEFAULT_HEADROOM_URL,
+        headroomCompressUserMessages: !!chatSettings.headroomCompressUserMessages,
+        headroomTimeoutMs: chatSettings.headroomTimeoutMs,
+        cavemanEnabled: !!chatSettings.cavemanEnabled,
+        cavemanLevel: chatSettings.cavemanLevel || "full",
+        ponytailEnabled: !!chatSettings.ponytailEnabled,
+        ponytailLevel: chatSettings.ponytailLevel || "full",
+        pxpipeEnabled: !!chatSettings.pxpipeEnabled,
+        pxpipeMinChars: chatSettings.pxpipeMinChars,
+        pxpipeTimeoutMs: chatSettings.pxpipeTimeoutMs,
+        pxpipeTransform: chatSettings.pxpipeEnabled ? await getPxpipeTransform() : null,
+        onPxpipeEvent: appendPxpipeEvent,
+        providerThinking,
+        ratePacing,
+        stripTools,
+        sourceFormatOverride: request?.url ? detectFormatByEndpoint(new URL(request.url).pathname, body) : null,
+        responseFormatOverride,
+        onCredentialsRefreshed: async (newCreds) => {
+          await updateProviderCredentials(credentials.connectionId, {
+            ...newCreds,
+            existingProviderSpecificData: credentials.providerSpecificData,
+            testStatus: "active"
+          });
+        },
+        onRequestSuccess: async () => {
+          await clearAccountError(credentials.connectionId, credentials, chainModel);
+          recordGeminiSuccess();
+          if (credentials.providerSpecificData?.proxyPoolAuto && credentials.providerSpecificData?.connectionProxyPoolId) {
+            const { recordAutoProxySuccess } = await import("@/lib/network/autoProxyPool.js");
+            await recordAutoProxySuccess(credentials.providerSpecificData.connectionProxyPoolId);
+          }
+        }
+      });
+
+      if (result.success) {
+        await rateLimitTracker.recordSuccess(credentials.connectionId, chainModel, provider);
+        recordModelSuccess(fullModel);
+        recordGeminiSuccess();
+        return result.response;
+      }
+
+      if (result.status === 504 || result.status === 503) {
+        const { recordModelFailure } = await import("open-sse/services/combo.js");
+        recordModelFailure(fullModel, result.status);
+      }
+
+      let resetsAtMs = result.resetsAtMs;
+      if (result.status === 429) {
+        const geminiRes = recordGemini429Hit(chainModel, credentials.connectionId);
+        if (geminiRes.rerouted) {
+          log.warn("GEMINI_REROUTE", `Gemini reached 7 consecutive 429s → rerouted to nVidia combo for 2 minutes (until ${new Date(geminiRes.reroutedUntil).toISOString()})`);
+        }
+        // Passive Google quota discovery from the real 429 body (never documented defaults).
+        const quotaInfo = parseGoogleQuotaError(result.rawBody || result.error);
+        await rateLimitTracker.recordRateLimitHit(credentials.connectionId, quotaInfo?.model || chainModel, provider, quotaInfo);
+        if (quotaInfo?.kind === "rpd" && quotaInfo.limit != null) {
+          log.warn("GEMINI_QUOTA", `${fullModel} RPD verdict on key ${credentials.connectionName}: used set to ${quotaInfo.limit}/${quotaInfo.limit}, blocked until tomorrow`);
+        }
+        if (credentials.providerSpecificData?.proxyPoolAuto && credentials.providerSpecificData?.connectionProxyPoolId) {
+          const { recordAutoProxyRateLimit } = await import("@/lib/network/autoProxyPool.js");
+          recordAutoProxyRateLimit(credentials.providerSpecificData.connectionProxyPoolId);
+        }
+      }
+
+      // Key-level auth failure → next key, not next model on same key.
+      if (result.status === 401 || result.status === 402 || result.status === 403) {
+        await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, chainModel, resetsAtMs);
+        lastError = result.error;
+        lastStatus = result.status;
+        keyFailed = true;
+        break;
+      }
+
+      // 404 handling: gemini-2.5-flash + lite get a 2-strike permanent block
+      // per key (visible in provider UI with lock + manual unlock). On the 2nd
+      // strike the request is redirected to the nVidia / openCODE combo.
+      if (result.status === 404 && (chainModel === "gemini-2.5-flash" || chainModel === "gemini-2.5-flash-lite")) {
+        const strikes = recordGemini404Strike(credentials.connectionId, chainModel);
+        if (strikes >= 2) {
+          rateLimitTracker.recordPermanentBlock(credentials.connectionId, chainModel, provider);
+          resetGemini404Strikes(credentials.connectionId, chainModel);
+          excludeConnectionIds.add(credentials.connectionId);
+          lastError = result.error;
+          lastStatus = result.status;
+          const fallbackCombo = await findGeminiFallbackComboTarget();
+          if (fallbackCombo) {
+            log.warn("GEMINI_CHAIN", `${fullModel} 404 x2 on key ${credentials.connectionName} -> permanently blocked on key, redirecting to combo "${fallbackCombo}"`);
+            return handleSingleModelChat(body, fallbackCombo, clientRawRequest, request, apiKey);
+          }
+          log.warn("GEMINI_CHAIN", `${fullModel} 404 x2 on key ${credentials.connectionName} -> permanently blocked on key (no fallback combo found)`);
+          keyFailed = true;
+          break;
+        }
+        log.warn("GEMINI_CHAIN", `${fullModel} 404 (${strikes}/2) on key ${credentials.connectionName} -> next in chain`);
+        lastError = result.error;
+        lastStatus = result.status;
+        continue;
+      } else if (result.status === 404) {
+        // General 404 for other models/providers leads to next key
+        await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, chainModel, resetsAtMs);
+        lastError = result.error;
+        lastStatus = result.status;
+        keyFailed = true;
+        break;
+      }
+
+      const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, chainModel, resetsAtMs);
+      lastError = result.error;
+      lastStatus = result.status;
+      if (shouldFallback) {
+        log.warn("GEMINI_CHAIN", `${fullModel} failed (${result.status}) on key ${credentials.connectionName} → next in chain`);
+        continue;
+      }
+      return result.response;
+    }
+
+    excludeConnectionIds.add(credentials.connectionId);
+    if (keyFailed) {
+      log.warn("GEMINI_CHAIN", `Key ${credentials.connectionName} auth-failed → next key`);
+    }
+  }
+}
+
+/**
  * Handle single model chat request
  */
 async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null) {
@@ -309,14 +511,47 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     if (estimatedTokens > 0) {
       const providerModelsMap = getProviderModels(modelInfo.provider);
       const modelDef = providerModelsMap.find(m => m.id === modelInfo.model);
-      if (modelDef && modelDef.contextLength && estimatedTokens > modelDef.contextLength) {
-        log.warn("CONTEXT", `Request (${estimatedTokens} tokens) exceeds ${modelStr} context limit (${modelDef.contextLength}), finding alternative`);
-        
+      const limit = modelDef?.contextLength || (isGeminiProvider(modelInfo.provider) ? 250000 : 0);
+      if (limit && estimatedTokens > limit) {
+        log.warn("CONTEXT", `Request (${estimatedTokens} tokens) exceeds ${modelStr} context limit (${limit}), finding alternative`);
+
+        // Task 1.B: If Gemini request overflows 250k, redirect to tested nVidia models with 1M context windows
+        if (isGeminiProvider(modelInfo.provider)) {
+          const { isIdleBeyondHour, probeIdleModel } = await import("open-sse/services/combo.js");
+          // Candidates: nvidia/nemotron-3-ultra-550b-a55b, nvidia/nemotron-3-super-120b-a12b, z-ai/glm-5.3
+          const nvCandidates = [
+            "nvidia/nemotron-3-ultra-550b-a55b",
+            "nvidia/nemotron-3-super-120b-a12b",
+            "z-ai/glm-5.3"
+          ];
+
+          for (const cand of nvCandidates) {
+            const candInfo = await getModelInfo(cand);
+            if (candInfo.provider) {
+              const activeConns = await getProviderCredentials(candInfo.provider, new Set(), candInfo.model).catch(() => null);
+              if (activeConns && !activeConns.allRateLimited) {
+                // Check if tested in last hour
+                const idle = await isIdleBeyondHour(cand);
+                if (idle) {
+                  const alive = await probeIdleModel((b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey), body, cand, log);
+                  if (alive) {
+                    log.info("CONTEXT", `Redirecting oversized Gemini request to tested nVidia/GLM model: ${cand}`);
+                    return handleSingleModelChat(body, cand, clientRawRequest, request, apiKey);
+                  }
+                } else {
+                  log.info("CONTEXT", `Redirecting oversized Gemini request to already verified model: ${cand}`);
+                  return handleSingleModelChat(body, cand, clientRawRequest, request, apiKey);
+                }
+              }
+            }
+          }
+        }
+
         // Get all models from the same provider that support the context
         const suitableModels = providerModelsMap
           .filter(m => m.contextLength && m.contextLength >= estimatedTokens)
           .sort((a, b) => (a.contextLength || 0) - (b.contextLength || 0));
-        
+
         if (suitableModels.length > 0) {
           const alternativeModel = `${modelInfo.provider}/${suitableModels[0].id}`;
           log.info("CONTEXT", `Redirecting to ${alternativeModel} (context: ${suitableModels[0].contextLength})`);
@@ -405,6 +640,13 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
   // Extract userAgent from request
   const userAgent = request?.headers?.get("user-agent") || "";
+
+  // Gemini fixed chain: same-key cascade first, next key after.
+  // x-connection-id pins the request to one specific key (RPD table "Test" button).
+  if (isGeminiProvider(provider)) {
+    const pinnedConnectionId = request?.headers?.get("x-connection-id") || null;
+    return handleGeminiChain(body, provider, model, clientRawRequest, request, apiKey, pinnedConnectionId);
+  }
 
   // Try with available accounts (fallback on errors)
   const excludeConnectionIds = new Set();
@@ -541,18 +783,20 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
           log.warn("GEMINI_REROUTE", `Gemini reached 7 consecutive 429s → rerouted to nVidia combo for 2 minutes (until ${new Date(geminiRes.reroutedUntil).toISOString()})`);
         }
       }
-      await rateLimitTracker.recordRateLimitHit(credentials.connectionId, model, provider);
+      // Passive Google quota discovery (generativelanguage 429 bodies carry the real violated limit).
+      const quotaInfo = isGeminiProvider(provider) ? parseGoogleQuotaError(result.rawBody || result.error) : null;
+      await rateLimitTracker.recordRateLimitHit(credentials.connectionId, (quotaInfo && quotaInfo.model) || model, provider, quotaInfo);
       // Auto proxy-pool mode: 3 consecutive 429s auto-pause this proxy for 3h.
       if (credentials.providerSpecificData?.proxyPoolAuto && credentials.providerSpecificData?.connectionProxyPoolId) {
         const { recordAutoProxyRateLimit } = await import("@/lib/network/autoProxyPool.js");
-        const autoRes = await recordAutoProxyRateLimit(credentials.providerSpecificData.connectionProxyPoolId);
+        const autoRes = recordAutoProxyRateLimit(credentials.providerSpecificData.connectionProxyPoolId);
         if (autoRes.paused) {
           log.warn("PROXY", `Auto proxy ${String(credentials.providerSpecificData.connectionProxyPoolId).slice(0, 8)} paused 3h after 3x consecutive 429 → rotating to next`);
         }
       }
     }
     if (provider === "antigravity" && (result.status === 409 || result.status === 429)) {
-      quotaResetMs = await handleAntigravityQuotaError(
+      quotaResetMs = handleAntigravityQuotaError(
         credentials.connectionId, result.status, model,
         refreshedCredentials.accessToken, credentials.providerSpecificData
       );
@@ -561,9 +805,10 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
     // Exhausted Antigravity model is blocked only in RAM cache until upstream resetAt.
     // Do not persist a modelLock_* for this path.
-    const shouldFallback = provider === "antigravity" && quotaResetMs
-      ? true
-      : (await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs)).shouldFallback;
+    const shouldFallbackResult = provider === "antigravity" && quotaResetMs
+      ? { shouldFallback: true }
+      : await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs);
+    const shouldFallback = shouldFallbackResult.shouldFallback;
 
     if (shouldFallback) {
       log.warn("FALLBACK", `⇄ ACC:${credentials.connectionName} UNAVAILABLE (${result.status}) → NEXT ACCOUNT`);

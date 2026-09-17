@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useNotificationStore } from "@/store/notificationStore";
 import Sidebar from "../Sidebar";
 import Header from "../Header";
+import CommandPalette from "../CommandPalette";
 
 function getToastStyle(type) {
   if (type === "success") {
@@ -45,8 +46,14 @@ export default function DashboardLayout({ children }) {
           return (
             <div
               key={n.id}
-              className={`rounded-lg border px-3 py-2 shadow-lg backdrop-blur-sm ${style.wrapper}`}
+              className={`animate-pop-in relative overflow-hidden rounded-lg border px-3 py-2 shadow-lg backdrop-blur-sm ${style.wrapper}`}
             >
+              {n.duration > 0 && (
+                <span
+                  className="absolute bottom-0 left-0 h-0.5 bg-current/40"
+                  style={{ animation: `toastProgress ${n.duration}ms linear forwards` }}
+                />
+              )}
               <div className="flex items-start gap-2">
                 <span className="material-symbols-outlined text-[18px] leading-5">{style.icon}</span>
                 <div className="min-w-0 flex-1">
@@ -68,6 +75,7 @@ export default function DashboardLayout({ children }) {
           );
         })}
       </div>
+      <CommandPalette />
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div

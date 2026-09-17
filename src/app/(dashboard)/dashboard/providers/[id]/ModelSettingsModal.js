@@ -78,31 +78,27 @@ export default function ModelSettingsModal({ isOpen, onClose, modelId, fullModel
         </div>
         <div>
           <p className="text-sm font-medium mb-1.5">Capabilities</p>
-          {isCustom ? (
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-text-muted mb-1 block">Context window</label>
-                  <input type="number" min="0" value={ctx} onChange={(e) => setCtx(e.target.value)} placeholder="e.g. 200000" className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary" />
-                </div>
-                <div>
-                  <label className="text-xs text-text-muted mb-1 block">Max output</label>
-                  <input type="number" min="0" value={maxOut} onChange={(e) => setMaxOut(e.target.value)} placeholder="e.g. 64000" className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary" />
-                </div>
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-text-muted mb-1 block">Context window</label>
+                <input type="number" min="0" value={ctx} onChange={(e) => setCtx(e.target.value)} placeholder="e.g. 200000" className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary" />
               </div>
-              <div className="flex flex-wrap gap-4">
-                {Object.entries(CAPACITY_META).map(([key, meta]) => (
-                  <Toggle key={key} checked={!!localCaps[key]} onChange={(v) => setLocalCaps((p) => ({ ...p, [key]: v }))} label={meta.label} description={meta.desc} size="sm" />
-                ))}
+              <div>
+                <label className="text-xs text-text-muted mb-1 block">Max output</label>
+                <input type="number" min="0" value={maxOut} onChange={(e) => setMaxOut(e.target.value)} placeholder="e.g. 64000" className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary" />
               </div>
             </div>
-          ) : (
-            <CapacityBadges caps={caps} size={16} />
-          )}
+            <div className="flex flex-wrap gap-4">
+              {Object.entries(CAPACITY_META).map(([key, meta]) => (
+                <Toggle key={key} checked={!!localCaps[key]} onChange={(v) => setLocalCaps((p) => ({ ...p, [key]: v }))} label={meta.label} description={meta.desc} size="sm" />
+              ))}
+            </div>
+          </div>
         </div>
         <div className="flex gap-2 pt-1">
           <Button onClick={onClose} variant="ghost" fullWidth size="sm">Close</Button>
-          {isCustom && onSave && (
+          {onSave && (
             <Button onClick={handleSave} fullWidth size="sm" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
           )}
         </div>

@@ -56,6 +56,13 @@
   --radius-brand: 10px;
   --radius-brand-lg: 14px;
 
+  /* Motion tokens (2026) — one place to tune every duration/easing */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-med: 240ms;
+  --dur-slow: 480ms;
+
   /* Shadows */
   --shadow-soft: 0 1px 2px 0 rgba(0,0,0,0.04);
   --shadow-warm: 0 2px 12px -2px rgba(229, 106, 74, 0.18);
@@ -473,66 +480,44 @@ button:disabled,
   opacity: 0.04;
 }
 
-/* Topology: router card pulse (no flying rings) + electric edge beam */
-@keyframes topology-router-pulse {
+/* 2026 Topology: Fluid quantum neural fiber + kinetic photon pulse */
+@keyframes topology-router-quantum {
   0%, 100% {
     transform: scale(1);
-    box-shadow:
-      0 0 8px #fde047,
-      0 0 20px color-mix(in srgb, var(--color-primary) 65%, transparent),
-      0 0 32px rgba(34, 211, 238, 0.4),
-      inset 0 0 10px rgba(253, 224, 71, 0.3);
+    box-shadow: 0 0 16px rgba(99, 102, 241, 0.25), 0 0 32px rgba(168, 85, 247, 0.15), inset 0 0 12px rgba(255, 255, 255, 0.15);
   }
   50% {
-    transform: scale(1.06);
-    box-shadow:
-      0 0 14px #fef08a,
-      0 0 28px #facc15,
-      0 0 44px rgba(34, 211, 238, 0.6),
-      inset 0 0 14px rgba(255, 255, 255, 0.25);
+    transform: scale(1.025);
+    box-shadow: 0 0 28px rgba(99, 102, 241, 0.5), 0 0 52px rgba(168, 85, 247, 0.35), inset 0 0 16px rgba(255, 255, 255, 0.35);
   }
 }
-@keyframes topology-router-icon-shake {
-  0%, 100% { transform: rotate(0deg) scale(1); filter: drop-shadow(0 0 2px #fde047); }
-  25% { transform: rotate(-5deg) scale(1.08); filter: drop-shadow(0 0 6px #facc15); }
-  75% { transform: rotate(5deg) scale(1.08); filter: drop-shadow(0 0 6px #22d3ee); }
+
+@keyframes topology-stream-flow {
+  0% { stroke-dashoffset: 60; }
+  100% { stroke-dashoffset: 0; }
 }
-@keyframes topology-router-label-flicker {
-  0%, 100% { text-shadow: 0 0 6px #fde047, 0 0 12px #22d3ee; }
-  50% { text-shadow: 0 0 10px #fff, 0 0 18px #facc15; }
+
+@keyframes topology-photon-drift {
+  0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 4px #818cf8); }
+  50% { opacity: 1; filter: drop-shadow(0 0 10px #c084fc); }
 }
-@keyframes topology-edge-dash {
-  to { stroke-dashoffset: -36; }
-}
-@keyframes topology-edge-flicker {
-  0%, 100% { opacity: 0.85; }
-  40% { opacity: 1; }
-  55% { opacity: 0.55; }
-  70% { opacity: 1; }
-}
+
 .topology-router-core {
-  animation: topology-router-pulse 0.75s ease-in-out infinite;
-  border-color: #fde047 !important;
+  animation: topology-router-quantum 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  border-color: rgba(99, 102, 241, 0.6) !important;
 }
 .topology-router-icon {
-  animation: topology-router-icon-shake 0.45s ease-in-out infinite;
-}
-.topology-router-label {
-  animation: topology-router-label-flicker 0.7s ease-in-out infinite;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .topology-router-badge {
-  box-shadow: 0 0 10px #fde047, 0 0 16px rgba(34, 211, 238, 0.6);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
 }
-.topology-edge-kame {
-  stroke-dasharray: 8 6;
-  animation: topology-edge-dash 0.22s linear infinite;
+.topology-edge-photon {
+  stroke-dasharray: 8 16;
+  animation: topology-stream-flow 0.85s linear infinite;
 }
-.topology-edge-halo {
-  animation: topology-edge-flicker 0.18s steps(2) infinite;
-}
-.topology-edge-plasma {
-  stroke-dasharray: 14 10;
-  animation: topology-edge-dash 0.18s linear infinite, topology-edge-flicker 0.22s steps(3) infinite;
+.topology-edge-aura {
+  animation: topology-photon-drift 2.2s ease-in-out infinite;
 }
 
 /* React Flow controls: match app theme */
@@ -686,5 +671,84 @@ button:disabled,
 }
 .stat-tile-glow:hover::after {
   left: 200%;
+}
+
+/* ============================================================
+   2026 Motion layer — micro-interactions, focus rings, skeletons
+   ============================================================ */
+
+/* Unified :focus-visible ring */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+  border-radius: var(--radius-brand);
+}
+
+/* Button press micro-interaction (opt-in via .btn-press) */
+.btn-press {
+  transition: transform var(--dur-fast) var(--ease-out-expo),
+              box-shadow var(--dur-fast) var(--ease-out-expo);
+}
+.btn-press:active {
+  transform: scale(0.98);
+}
+
+/* Spring toast/panel entrance */
+.animate-pop-in {
+  animation: popIn var(--dur-med) var(--ease-spring) both;
+}
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Skeleton shimmer */
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-2);
+}
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--color-surface-3), transparent);
+  animation: shimmer 1.4s var(--ease-out-expo) infinite;
+}
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* View Transitions API — soft cross-fade between dashboard tabs (native, no JS lib).
+   Browsers without support simply skip the animation. */
+::view-transition-old(root) {
+  animation: vtFadeOut var(--dur-fast) var(--ease-out-expo) both;
+}
+::view-transition-new(root) {
+  animation: vtFadeIn var(--dur-med) var(--ease-out-expo) both;
+}
+@keyframes vtFadeOut {
+  to { opacity: 0; }
+}
+@keyframes vtFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Toast auto-dismiss progress bar */
+@keyframes toastProgress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* Reduced motion: kill all non-essential animation globally (a11y 2026) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 

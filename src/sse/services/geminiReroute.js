@@ -75,6 +75,26 @@ export async function findNvidiaComboTarget() {
 }
 
 /**
+ * Resolve the fallback combo for Gemini 404s: prefer "nVidia", then "openCODE".
+ * @returns {Promise<string|null>} combo name if exists
+ */
+export async function findGeminiFallbackComboTarget() {
+  try {
+    const combos = await getCombos();
+    if (!combos || combos.length === 0) return null;
+    const nv = combos.find((c) => c.name && c.name.toLowerCase() === "nvidia");
+    if (nv) return nv.name;
+    const nvPartial = combos.find((c) => c.name && c.name.toLowerCase().includes("nvidia"));
+    if (nvPartial) return nvPartial.name;
+    const oc = combos.find((c) => c.name && c.name.toLowerCase().includes("opencode"));
+    if (oc) return oc.name;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Record a 429 error for Gemini.
  * @param {string} [model] - Model name that hit 429
  * @param {string} [keyId] - Connection ID / key used

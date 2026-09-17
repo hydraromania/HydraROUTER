@@ -78,18 +78,20 @@ export async function POST(request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { action, id } = body || {};
+  const { action, id, targetModel, blockGlobal = false } = body || {};
   if (!id || (action !== "cancel" && action !== "reroute")) {
     return Response.json({ error: "Missing id or invalid action (cancel|reroute)" }, { status: 400 });
   }
 
-  const { found, item } = cancelLiveRequest(id, {
-    reason: action === "reroute" ? "Rerouted from dashboard" : "Cancelled from dashboard",
-  });
+  const reason = action === "reroute"
+    ? (targetModel ? `Rerouted to ${targetModel} from dashboard` : "Rerouted from dashboard")
+    : "Cancelled from dashboard";
+
+  const { found, item } = cancelLiveRequest(id, { reason });
   if (!found) return Response.json({ error: "Request not found or already finished" }, { status: 404 });
 
   let blockedModel = null;
-  if (action === "reroute" && item.provider && item.model) {
+  if (action === "reroute" && blockGlobal && item.provider && item.model) {
     blockedModel = `${item.provider}/${item.model}`;
     blockModel(blockedModel);
   }
@@ -98,7 +100,12 @@ export async function POST(request) {
     success: true,
     action,
     id,
+    targetModel: targetModel || null,
     blockedModel,
-    message: blockedModel ? `${blockedModel} blocked for 10m; retry will pick another model` : "Request cancelled",
+    message: targetModel
+      ? `Request rerouted directly to ${targetModel}`
+      : blockedModel
+      ? `${blockedModel} blocked for 10m; retry will pick another model`
+      : "Request cancelled",
   });
 }

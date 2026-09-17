@@ -1,4 +1,3 @@
-import { machineIdSync } from 'node-machine-id';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -19,11 +18,7 @@ function loadRawMachineId() {
     cachedRawId = fs.readFileSync(MACHINE_ID_FILE, 'utf8').trim();
     if (cachedRawId) return cachedRawId;
   } catch {}
-  try {
-    cachedRawId = machineIdSync();
-  } catch {
-    cachedRawId = crypto.randomUUID();
-  }
+  cachedRawId = crypto.randomUUID();
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(MACHINE_ID_FILE, cachedRawId, { mode: 0o600 });

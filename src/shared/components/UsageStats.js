@@ -11,7 +11,6 @@ function isLLMProvider(id) {
   return p.serviceKinds.includes("llm") || p.serviceKinds.includes("embedding");
 }
 import Badge from "./Badge";
-import Card from "./Card";
 import OverviewCards from "@/app/(dashboard)/dashboard/usage/components/OverviewCards";
 import UsageTable, { fmt, fmtTime } from "@/app/(dashboard)/dashboard/usage/components/UsageTable";
 import dynamic from "next/dynamic";
@@ -322,7 +321,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
     return () => es.close();
   }, []);
 
-  const toggleSort = useCallback((tableType, field) => {
+  const toggleSort = useCallback((_tableType, field) => {
     const params = new URLSearchParams(searchParams.toString());
     if (params.get("sortBy") === field) {
       params.set("sortOrder", params.get("sortOrder") === "asc" ? "desc" : "asc");
@@ -452,9 +451,13 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
 
   if (!stats && !loading) return <div className="text-text-muted">Failed to load usage statistics.</div>;
 
+  // Skeleton grid mirroring the OverviewCards + chart layout (perceived performance > spinner).
   const spinner = (
-    <div className="flex items-center justify-center py-12 text-text-muted">
-      <span className="material-symbols-outlined text-[32px] animate-spin">progress_activity</span>
+    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 sm:gap-4">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="skeleton-shimmer h-[92px] rounded-2xl border border-border-subtle" />
+      ))}
+      <div className="skeleton-shimmer h-[56px] rounded-2xl border border-border-subtle sm:col-span-2 md:col-span-3 lg:col-span-5" />
     </div>
   );
 

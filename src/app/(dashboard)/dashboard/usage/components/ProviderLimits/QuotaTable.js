@@ -177,7 +177,7 @@ export default function QuotaTable({
               <div className={`min-w-0 flex-1 ${compact ? "space-y-1" : "space-y-1.5"}`}>
                 {!isUnlimited && (
                 <div className={`${compact ? "h-1" : "h-1.5"} rounded-full overflow-hidden border ${colors.bgLight} ${
-                  quota.remaining === 0 ? "border-black/10 dark:border-white/10" : "border-transparent"
+                  quota.remaining === 0 ? "border-border" : "border-transparent"
                 }`}>
                   <div
                     className={`h-full transition-all duration-300 ${colors.bg}`}

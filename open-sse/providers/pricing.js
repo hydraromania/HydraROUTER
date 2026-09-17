@@ -207,7 +207,6 @@ export const PROVIDER_PRICING = {
     "nvidia/nemotron-3-super-120b-a12b": { input: 0.3, output: 0.9, cached: 0.1, reasoning: 0.9 },
     "nvidia/nemotron-3-ultra-550b-a55b": { input: 0.8, output: 2.4, cached: 0.2, reasoning: 2.4 },
     "deepseek-ai/deepseek-v4-flash-0731": { input: 0.14, output: 0.28, cached: 0.014, reasoning: 0.28 },
-    "google/gemma-4-31b-it": { input: 0.15, output: 0.6, cached: 0.05, reasoning: 0.6 },
     "poolside/laguna-xs-2.1": { input: 0.15, output: 0.6, cached: 0.05, reasoning: 0.6 },
     "openai/gpt-4o-mini": { input: 0.15, output: 0.6, cached: 0.075, reasoning: 0.6 },
     "openai/gpt-5": { input: 1.25, output: 10.0, cached: 0.125, reasoning: 10.0 },
@@ -268,6 +267,7 @@ export const PROVIDER_PRICING = {
     "z-ai/glm-5-turbo": { input: 1.2, output: 4.0, cached: 0.24, reasoning: 4.0 },
     "z-ai/glm-5.1": { input: 1.05, output: 3.5, cached: 0.525, reasoning: 3.5 },
     "z-ai/glm-5.2": { input: 1.4, output: 4.4, cached: 0.26, reasoning: 4.4 },
+    "z-ai/glm-5.3": { input: 1.4, output: 4.4, cached: 0.26, reasoning: 4.4 },
     "z-ai/glm-5.3-free": { input: 0, output: 0, cached: 0, reasoning: 0 },
   },
 };

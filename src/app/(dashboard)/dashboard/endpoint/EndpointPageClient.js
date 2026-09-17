@@ -1627,7 +1627,7 @@ export default function APIPageClient({ machineId }) {
                 Installing Tailscale...
               </div>
               {tsInstallLog.length > 0 && (
-                <div ref={tsLogRef} className="bg-black/5 dark:bg-white/5 rounded p-2 max-h-40 overflow-y-auto font-mono text-xs text-text-muted">
+                <div ref={tsLogRef} className="bg-surface-2 rounded p-2 max-h-40 overflow-y-auto font-mono text-xs text-text-muted">
                   {tsInstallLog.map((line, i) => (
                     <div key={i}>{line}</div>
                   ))}

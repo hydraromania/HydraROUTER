@@ -5,12 +5,12 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { getProviderIconSrc, markProviderIconMissing } from "@/shared/utils/providerIcon";
-import { Card, Button, Badge, Input, Modal, CardSkeleton, OAuthModal, KiroOAuthWrapper, CursorAuthModal, IFlowCookieModal, GitLabAuthModal, Toggle, Select, EditConnectionModal, NoAuthProxyCard, ConfirmModal } from "@/shared/components";
+import { Card, Button, Modal, CardSkeleton, OAuthModal, KiroOAuthWrapper, CursorAuthModal, IFlowCookieModal, GitLabAuthModal, Toggle, EditConnectionModal, NoAuthProxyCard, ConfirmModal } from "@/shared/components";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
-import { OAUTH_PROVIDERS, APIKEY_PROVIDERS, FREE_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, getProviderAlias, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, AI_PROVIDERS } from "@/shared/constants/providers";
+import { OAUTH_PROVIDERS, APIKEY_PROVIDERS, FREE_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, getProviderAlias, isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
@@ -19,7 +19,6 @@ import { translate } from "@/i18n/runtime";
 import { fetchSuggestedModels } from "@/shared/utils/providerModelsFetcher";
 import { getProviderCustomModelRows } from "@/shared/utils/providerCustomModels";
 import ModelRow from "./ModelRow";
-import PassthroughModelsSection from "./PassthroughModelsSection";
 import CompatibleModelsSection from "./CompatibleModelsSection";
 import ConnectionRow from "./ConnectionRow";
 import AddApiKeyModal from "./AddApiKeyModal";
@@ -69,7 +68,6 @@ export default function ProviderDetailPage() {
   const [showAddCustomModel, setShowAddCustomModel] = useState(false);
   const [settingsModel, setSettingsModel] = useState(null);
   const [selectedConnectionIds, setSelectedConnectionIds] = useState([]);
-  const [bulkProxyPoolId, setBulkProxyPoolId] = useState("__none__");
   const [bulkUpdatingProxy, setBulkUpdatingProxy] = useState(false);
   const [providerStrategy, setProviderStrategy] = useState(null);
   const [providerStickyLimit, setProviderStickyLimit] = useState("");
@@ -81,6 +79,7 @@ export default function ProviderDetailPage() {
   const [disabledModelIds, setDisabledModelIds] = useState([]);
   const [blockedModels, setBlockedModels] = useState([]);
   const [unblockingModels, setUnblockingModels] = useState(() => new Set());
+  const [unlockingLocks, setUnlockingLocks] = useState(() => new Set());
   const [confirmState, setConfirmState] = useState(null);
   const [showAgRiskModal, setShowAgRiskModal] = useState(false);
   const [oneByOneRunning, setOneByOneRunning] = useState(false);
@@ -341,6 +340,24 @@ export default function ProviderDetailPage() {
       `${providerId}/${modelId}`,
     ];
     return blockedModels.find((b) => candidates.includes(b.model)) || null;
+  };
+
+  // Manual unlock of ALL modelLock_* on one connection (permanent 404 blocks included)
+  const handleUnlockConnectionLocks = async (connectionId) => {
+    if (unlockingLocks.has(connectionId)) return;
+    setUnlockingLocks((prev) => new Set(prev).add(connectionId));
+    try {
+      const res = await fetch(`/api/providers/${connectionId}/unlock-locks`, { method: "POST" });
+      if (res.ok) await fetchConnections();
+    } catch (error) {
+      console.log("Error unlocking connection locks:", error);
+    } finally {
+      setUnlockingLocks((prev) => {
+        const next = new Set(prev);
+        next.delete(connectionId);
+        return next;
+      });
+    }
   };
 
   // Fetch free models from Kilo API for kilocode provider
@@ -925,7 +942,6 @@ export default function ProviderDetailPage() {
     }
   };
 
-  const selectedConnections = connections.filter((conn) => selectedConnectionIds.includes(conn.id));
   const allSelected = connections.length > 0 && selectedConnectionIds.length === connections.length;
 
   const toggleSelectConnection = (connectionId) => {
@@ -944,34 +960,9 @@ export default function ProviderDetailPage() {
     setSelectedConnectionIds(connections.map((conn) => conn.id));
   };
 
-  const clearSelection = () => {
-    setSelectedConnectionIds([]);
-    setBulkProxyPoolId("__none__");
-  };
-
   useEffect(() => {
     setSelectedConnectionIds((prev) => prev.filter((id) => connections.some((conn) => conn.id === id)));
   }, [connections]);
-
-  const selectedProxySummary = (() => {
-    if (selectedConnections.length === 0) return "";
-    const poolIds = new Set(selectedConnections.map((conn) => conn.providerSpecificData?.proxyPoolId || "__none__"));
-    if (poolIds.size === 1) {
-      const onlyId = [...poolIds][0];
-      if (onlyId === "__none__") return "All selected currently unbound";
-      if (onlyId === "__auto__") return "All selected currently on Auto (rotate)";
-      const pool = proxyPools.find((p) => p.id === onlyId);
-      return `All selected currently bound to ${pool?.name || onlyId}`;
-    }
-    return "Selected connections have mixed proxy bindings";
-  })();
-
-  const openBulkProxyModal = () => {
-    if (selectedConnections.length === 0) return;
-    const uniquePoolIds = [...new Set(selectedConnections.map((conn) => conn.providerSpecificData?.proxyPoolId || "__none__"))];
-    setBulkProxyPoolId(uniquePoolIds.length === 1 ? uniquePoolIds[0] : "__none__");
-    setShowBulkProxyModal(true);
-  };
 
   const closeBulkProxyModal = () => {
     if (bulkUpdatingProxy) return;
@@ -1376,7 +1367,7 @@ function SortableConnectionItem({
                     onClick={async () => {
                       await handleAddCustomModel(m.id, "llm", providerStorageAlias);
                     }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-black/10 dark:border-white/10 text-xs text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-xs text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors"
                     title={`${m.name} · ${(m.contextLength / 1000).toFixed(0)}k ctx`}
                   >
                     <span className="material-symbols-outlined text-[13px]">add</span>
@@ -1397,7 +1388,7 @@ function SortableConnectionItem({
                 <button
                   key={m.id}
                   onClick={() => handleEnableModel(m.id)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-dashed border-black/10 dark:border-white/10 text-xs text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-dashed border-border text-xs text-text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors"
                   title="Restore model"
                 >
                   <span className="material-symbols-outlined text-[13px]">add</span>
@@ -1832,7 +1823,7 @@ function SortableConnectionItem({
       )}
 
       {/* Rate Limits (providers with MODEL_RATE_LIMITS config: gemini, nvidia, ...) — self-hides otherwise */}
-      <RateLimitsTable providerId={providerId} />
+      <RateLimitsTable providerId={providerId} onUnlockConnectionLocks={handleUnlockConnectionLocks} unlockingConnectionIds={unlockingLocks} />
 
       {/* Models */}
       <Card>
@@ -1977,7 +1968,7 @@ function SortableConnectionItem({
         caps={settingsModel?.caps}
         thinkingLevels={settingsModel?.thinkingLevels}
         isCustom={settingsModel?.isCustom}
-        onSave={settingsModel?.isCustom ? async (mergedCaps) => {
+        onSave={settingsModel ? async (mergedCaps) => {
           await handleAddCustomModel(settingsModel.id, "llm", providerStorageAlias, mergedCaps);
         } : undefined}
       />

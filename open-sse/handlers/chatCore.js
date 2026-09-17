@@ -350,6 +350,8 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     accountName: credentials?.connectionName || (connectionId ? `Account ${connectionId.slice(0, 8)}` : null),
     stream,
     userAgent,
+    clientIp: clientRawRequest?.headers?.["x-forwarded-for"] || clientRawRequest?.headers?.["x-real-ip"] || null,
+    sessionId: sessionSeed || null,
     messagesCount: msgCount,
     proxy: proxyTracking,
     body,
@@ -400,14 +402,18 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
   // Rate-pacing for Gemini to avoid burst 429 on free-tier / single connection
   if (provider === "gemini" || provider === "gemini-cli") {
-    const paceKey = `${provider}:${credentials?.connectionId || proxyOptions?.connectionProxyUrl || "direct"}`;
+    const proxyUrl = proxyOptions.vercelRelayUrl || proxyOptions.connectionProxyUrl || "direct";
+    const keyId = credentials?.connectionId || "direct";
+    const paceKey = `${provider}:${keyId}:${proxyUrl}`;
     await geminiRatePacer.acquire(paceKey);
   }
 
   // Error Analysis fix: per-provider rate pacing (settings.ratePacing[provider]).
   // Gemini already has its own always-on pacer — skip the generic one there to avoid double delay.
   if (ratePacing?.enabled && provider !== "gemini" && provider !== "gemini-cli") {
-    const paceKey = `${provider}:${credentials?.connectionId || proxyOptions?.connectionProxyUrl || "direct"}`;
+    const proxyUrl = proxyOptions.vercelRelayUrl || proxyOptions.connectionProxyUrl || "direct";
+    const keyId = credentials?.connectionId || "direct";
+    const paceKey = `${provider}:${keyId}:${proxyUrl}`;
     await errorAnalysisRatePacer.acquire(paceKey, Number(ratePacing.minIntervalMs) || 1000);
     log?.debug?.("PACING", `${provider} | 1 req/${Number(ratePacing.minIntervalMs) || 1000}ms (error-analysis fix)`);
   }
@@ -490,7 +496,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
   // Provider returned error
   if (!providerResponse.ok) {
-    const { statusCode, message, resetsAtMs } = await parseUpstreamError(providerResponse, executor);
+    const { statusCode, message, resetsAtMs, rawBody } = await parseUpstreamError(providerResponse, executor);
 
     if (statusCode === HTTP_STATUS.BAD_REQUEST) {
       const learned = detectAndLearnError(provider, model, message, targetFormat);
@@ -510,7 +516,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
             providerResponseFormat = retryResult.responseFormat || targetFormat;
             reqLogger.logTargetRequest(providerUrl, providerHeaders, finalBody);
           } else {
-            const { statusCode: retryStatusCode, message: retryMessage, resetsAtMs: retryResetsAtMs } = await parseUpstreamError(retryResult.response, executor);
+            const { statusCode: retryStatusCode, message: retryMessage, resetsAtMs: retryResetsAtMs, rawBody: retryRawBody } = await parseUpstreamError(retryResult.response, executor);
             appendRequestLog({ model, provider, connectionId, status: `FAILED ${retryStatusCode} (after auto-correct)` }).catch(() => { });
             saveRequestDetail(buildRequestDetail({
               provider, model, connectionId,
@@ -531,7 +537,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
             trackPendingRequest(model, provider, connectionId, false, true);
             trackRequestError(liveReqId, { error: retryMessage, statusCode: retryStatusCode });
             reqLogger.logError(new Error(retryMessage), correctedBody);
-            return createErrorResult(retryStatusCode, errMsg, retryResetsAtMs);
+            return createErrorResult(retryStatusCode, errMsg, retryResetsAtMs, retryRawBody || null);
           }
         }
       }
@@ -558,7 +564,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
         log.errorLine(reqTag, "✗", `ERROR ${statusCode} · ${provider}/${model} · ${Date.now() - requestStartTime}ms${urlStr}\n    ${errMsg}`);
       }
       reqLogger.logError(new Error(message), finalBody || translatedBody);
-      return createErrorResult(statusCode, errMsg, resetsAtMs);
+      return createErrorResult(statusCode, errMsg, resetsAtMs, rawBody || null);
     }
   }
 

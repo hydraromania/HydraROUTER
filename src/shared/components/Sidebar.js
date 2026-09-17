@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/shared/utils/cn";
 import { APP_CONFIG, UPDATER_CONFIG } from "@/shared/constants/config";
 import { MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
@@ -38,6 +38,7 @@ const systemItems = [
 
 export default function Sidebar({ onClose }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mediaOpen, setMediaOpen] = useState(false);
   const [isDisconnected, setIsDisconnected] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -161,7 +162,18 @@ export default function Sidebar({ onClose }) {
             <Link
               key={item.href}
               href={item.href}
-              onClick={onClose}
+              onClick={(e) => {
+                onClose?.();
+                // Native VT cross-fade between pages where supported (see ::view-transition-* in globals.css)
+                if (
+                  !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey &&
+                  typeof document.startViewTransition === "function" &&
+                  !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                ) {
+                  e.preventDefault();
+                  document.startViewTransition(() => router.push(item.href));
+                }
+              }}
               className={cn(
                 "flex items-center gap-3 px-3.5 py-2 rounded-xl transition-all duration-200 group font-medium text-[13px]",
                 isActive(item.href)

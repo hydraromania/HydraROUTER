@@ -757,6 +757,7 @@ export async function getAnalyticsData({ period = "7d", provider = "all", model 
     import("./connectionsRepo.js"),
     import("./nodesRepo.js"),
   ]);
+  const { getProviderAlias } = await import("@/shared/constants/providers.js");
 
   let allConnections = [];
   try { allConnections = await getProviderConnections(); } catch {}
@@ -768,7 +769,11 @@ export async function getAnalyticsData({ period = "7d", provider = "all", model 
   const providerNodeNameMap = {};
   try {
     const nodes = await getProviderNodes();
-    for (const n of nodes) if (n.id && n.name) providerNodeNameMap[n.id] = n.name;
+    for (const n of nodes) {
+      if (n.id) {
+        providerNodeNameMap[n.id] = n.name || getProviderAlias(n.id).toUpperCase();
+      }
+    }
   } catch {}
 
   // Determine cutoff time & bucket configuration

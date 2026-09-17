@@ -6,6 +6,29 @@ import PropTypes from "prop-types";
 const fmt = (n) => new Intl.NumberFormat().format(n || 0);
 const fmtCost = (n) => `$${(n || 0).toFixed(2)}`;
 
+// Client-side CSV export of the currently filtered, visible rows.
+function exportCsv({ columns, valueColumns, viewMode, groupedData, title }) {
+  const header = ["group", ...columns.map((c) => c.label), ...valueColumns.map((c) => c.label)];
+  const lines = [header.join(",")];
+  const esc = (v) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  for (const g of groupedData) {
+    const vals = viewMode === "tokens"
+      ? [g.summary.promptTokens, g.summary.cachedTokens, g.summary.completionTokens, g.summary.totalTokens]
+      : [g.summary.inputCost, g.summary.cachedCost, g.summary.outputCost, g.summary.totalCost || g.summary.cost];
+    lines.push([g.groupKey, ...columns.map((c) => g.summary[c.field]), ...vals].map(esc).join(","));
+  }
+  const blob = new Blob([`﻿${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${(title || "usage").toLowerCase().replace(/\s+/g, "-")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function fmtTime(iso) {
   if (!iso) return "Never";
   const diffMins = Math.floor((Date.now() - new Date(iso)) / 60000);
@@ -226,6 +249,16 @@ export default function UsageTable({
               <span className="material-symbols-outlined text-[16px]">unfold_less</span>
             </button>
           </div>
+
+          {/* Export CSV */}
+          <button
+            onClick={() => exportCsv({ columns, valueColumns, viewMode, groupedData: filteredData, title })}
+            disabled={filteredData.length === 0}
+            title="Exportă grupurile vizibile (filtrate) ca CSV"
+            className="btn-press flex size-7 items-center justify-center rounded-lg border border-border/60 bg-bg text-text-muted transition-colors hover:text-text-main disabled:opacity-40"
+          >
+            <span className="material-symbols-outlined text-[16px]">download</span>
+          </button>
         </div>
       </div>
 

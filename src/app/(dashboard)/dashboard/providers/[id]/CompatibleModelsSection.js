@@ -238,7 +238,7 @@ export default function CompatibleModelsSection({ providerStorageAlias, provider
         caps={settingsModel ? getCaps(`${providerStorageAlias}/${settingsModel.id}`) : null}
         thinkingLevels={settingsModel ? getThinkingLevels(providerStorageAlias, settingsModel.id) : null}
         isCustom={settingsModel?.source === "custom"}
-        onSave={settingsModel?.source === "custom" ? async (mergedCaps) => {
+        onSave={settingsModel ? async (mergedCaps) => {
           await onAddCustomModel(settingsModel.id, mergedCaps);
         } : undefined}
       />

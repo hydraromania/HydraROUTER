@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Card from "@/shared/components/Card";
 import Button from "@/shared/components/Button";
 import { cn } from "@/shared/utils/cn";
@@ -8,6 +8,7 @@ import { cn } from "@/shared/utils/cn";
 export default function ErrorAnalysisTab() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
   const [appliedActions, setAppliedActions] = useState({});
   const [applyingId, setApplyingId] = useState(null);
   const [applyMsg, setApplyMsg] = useState("");
@@ -33,9 +34,48 @@ export default function ErrorAnalysisTab() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load on mount
     fetchData();
   }, []);
+
+  const generateClaudePrompt = useCallback((pat) => {
+    const summary = data?.summary || {};
+    return `Salut Claude! Sunt în dashboard-ul HydraRouter și am nevoie de ajutor pentru a rezolva o problemă recurentă detectată de sistemul de analiză.
+
+DETALII PROBLEMĂ:
+- Titlu: ${pat.title}
+- Tip eroare: ${pat.type}
+- Provider/Model: ${pat.provider || "N/A"} / ${pat.model || "Toate"}
+- Severitate: ${pat.severity}
+- Număr apariții: ${pat.count}
+
+DESCRIERE:
+${pat.description}
+
+EȘANTION EROARE UPSTREAM:
+${pat.samples?.[0] || "N/A"}
+
+CONTEXT GLOBAL:
+- Total erori în sesiune: ${summary.totalErrors}
+- Erori 400 (Bad Request): ${summary.total400}
+- Erori 429 (Rate Limit): ${summary.total429}
+- Erori 410 (Model Gone): ${summary.total410}
+
+RECOMANDARE SISTEM:
+${pat.recommendation?.label || "Ajustare setări model sau provider"}
+
+Cerință: Analizează detaliile de mai sus și oferă-mi o sugestie de configurare sau un fix în cod pentru a preveni aceste erori pe viitor. Dacă este o eroare de tip Thinking Level sau Context Limit, explică-mi cum să optimizez request-ul.`;
+  }, [data]);
+
+  const copyToClipboard = async (pat) => {
+    const prompt = generateClaudePrompt(pat);
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopiedId(pat.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
 
   const handleApply = async (pat) => {
     const patternId = pat.id;
@@ -78,7 +118,7 @@ export default function ErrorAnalysisTab() {
     <div className="space-y-4">
       {/* Top summary cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <Card className="p-3.5 border-border-subtle bg-surface">
+        <Card className="p-3.5 border-border-subtle bg-surface shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
             Erori 400 (Bad Request)
           </div>
@@ -90,7 +130,7 @@ export default function ErrorAnalysisTab() {
           </div>
         </Card>
 
-        <Card className="p-3.5 border-border-subtle bg-surface">
+        <Card className="p-3.5 border-border-subtle bg-surface shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
             Erori 429 (Rate Limit)
           </div>
@@ -102,7 +142,7 @@ export default function ErrorAnalysisTab() {
           </div>
         </Card>
 
-        <Card className="p-3.5 border-border-subtle bg-surface">
+        <Card className="p-3.5 border-border-subtle bg-surface shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
             Erori 410 (Model Gone)
           </div>
@@ -114,7 +154,7 @@ export default function ErrorAnalysisTab() {
           </div>
         </Card>
 
-        <Card className="p-3.5 border-border-subtle bg-surface">
+        <Card className="p-3.5 border-border-subtle bg-surface shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
             Total Erori Analizate
           </div>
@@ -127,16 +167,19 @@ export default function ErrorAnalysisTab() {
         </Card>
       </div>
 
-      {/* Patterns & Recommendations */}
+      {/* Main Analysis Section */}
       <Card className="border-border-subtle overflow-hidden">
         <div className="flex items-center justify-between p-3.5 border-b border-border bg-bg-subtle/50">
-          <div>
-            <h3 className="text-sm font-semibold text-text-main">
-              Tipare de Eșec Repetitive & Recomandări Automate
-            </h3>
-            <p className="text-[11px] text-text-muted">
-              Analiză automată a erorilor 400 (context limit, parametri, incompatibilități tools/thinking), limitelor 429 și modelelor retrase 410.
-            </p>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">psychology</span>
+            <div>
+              <h3 className="text-sm font-semibold text-text-main">
+                AI Error Assistant (Prompt Generator)
+              </h3>
+              <p className="text-[11px] text-text-muted">
+                Analiză asistată de AI pentru tiparele de eșec repetitive. Generați prompturi optimizate pentru Claude.
+              </p>
+            </div>
           </div>
           <Button
             size="sm"
@@ -148,74 +191,123 @@ export default function ErrorAnalysisTab() {
             <span className={cn("material-symbols-outlined text-[14px]", loading && "animate-spin")}>
               refresh
             </span>
-            Reîmprospătează
+            Refresh Analysis
           </Button>
         </div>
 
-        <div className="p-3.5 divide-y divide-border">
+        <div className="p-0 divide-y divide-border">
           {applyMsg && (
-            <div className="pb-3 text-xs text-text-main bg-primary/10 border border-primary/20 rounded px-2.5 py-2">
-              {applyMsg}
+            <div className="m-3.5 text-xs text-text-main bg-primary/10 border border-primary/20 rounded px-2.5 py-2 flex items-center justify-between">
+              <span>{applyMsg}</span>
+              <button onClick={() => setApplyMsg("")} className="material-symbols-outlined text-[16px] hover:text-primary">close</button>
             </div>
           )}
           {patterns.length === 0 ? (
-            <div className="py-8 text-center text-text-muted text-xs">
-              Nu au fost detectate tipare repetitive de eroare 400, 429 sau 410 în sesiunile recente.
+            <div className="py-12 text-center text-text-muted text-xs">
+              <span className="material-symbols-outlined text-[48px] opacity-20 block mb-2">fact_check</span>
+              Nu au fost detectate tipare repetitive de eroare în sesiunile recente.
             </div>
           ) : (
             patterns.map((pat) => (
-              <div key={pat.id} className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn(
-                      "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                      pat.severity === "critical" && "bg-error/15 text-error border border-error/30",
-                      pat.severity === "high" && "bg-amber-500/15 text-amber-500 border border-amber-500/30",
-                      pat.severity === "medium" && "bg-primary/15 text-primary border border-primary/30"
-                    )}>
-                      {pat.severity}
-                    </span>
-                    <span className="font-semibold text-xs text-text-main">{pat.title}</span>
-                    <span className="font-mono text-[10px] text-text-muted bg-bg-subtle px-1.5 py-0.2 rounded border border-border">
-                      {pat.count} apariții
-                    </span>
+              <div key={pat.id} className="p-4 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                <div className="flex flex-col lg:flex-row gap-4">
+                  {/* Left: Metadata & Description */}
+                  <div className="flex-1 space-y-2.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                        pat.severity === "critical" && "bg-error/15 text-error border border-error/30",
+                        pat.severity === "high" && "bg-amber-500/15 text-amber-500 border border-amber-500/30",
+                        pat.severity === "medium" && "bg-primary/15 text-primary border border-primary/30"
+                      )}>
+                        {pat.severity}
+                      </span>
+                      <span className="font-bold text-sm text-text-main">{pat.title}</span>
+                      <span className="font-mono text-[10px] text-text-muted bg-bg-subtle px-1.5 py-0.2 rounded border border-border">
+                        {pat.count} apariții
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-bold uppercase text-text-muted flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">analytics</span> Analiza Cauzei
+                        </div>
+                        <p className="text-xs text-text-muted leading-relaxed">
+                          {pat.description}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-bold uppercase text-text-muted flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">tips_and_updates</span> Recomandare
+                        </div>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium leading-relaxed">
+                          {pat.recommendation?.label || "Ajustarea setărilor de rutare sau curățarea promptului de intrare."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {pat.samples?.length > 0 && (
+                      <div className="relative group/sample">
+                        <div className="text-[10px] font-bold uppercase text-text-muted mb-1 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">code</span> Upstream Trace
+                        </div>
+                        <div className="text-[11px] font-mono text-text-muted/80 bg-black/10 dark:bg-black/40 p-2.5 rounded border border-border/60 break-all max-h-24 overflow-y-auto">
+                          {pat.samples[0]}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <p className="text-xs text-text-muted leading-relaxed">
-                    {pat.description}
-                  </p>
+                  {/* Right: Actions */}
+                  <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0 justify-center min-w-[200px]">
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(pat)}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 border-2",
+                        copiedId === pat.id
+                          ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-500"
+                          : "bg-surface border-primary/30 text-primary hover:bg-primary/10 hover:border-primary/50"
+                      )}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {copiedId === pat.id ? "content_paste_check" : "content_copy"}
+                      </span>
+                      {copiedId === pat.id ? "Copiat în Clipboard!" : "Copiază Prompt pentru Claude"}
+                    </button>
 
-                  {pat.samples?.length > 0 && (
-                    <div className="text-[11px] font-mono text-text-muted/80 bg-bg-subtle/80 p-2 rounded border border-border/60 break-all">
-                      <span className="font-semibold text-text-muted">Exemplu upstream: </span>
-                      {pat.samples[0]}
-                    </div>
-                  )}
-                </div>
-
-                <div className="sm:self-center shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleApply(pat)}
-                    disabled={appliedActions[pat.id] || applyingId === pat.id}
-                    className={cn(
-                      "px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5",
-                      appliedActions[pat.id]
-                        ? "bg-success/15 text-success border border-success/30 cursor-default"
-                        : "bg-primary text-white hover:bg-primary/90 shadow-sm"
-                    )}
-                  >
-                    <span className="material-symbols-outlined text-[14px]">
-                      {appliedActions[pat.id] ? "check" : applyingId === pat.id ? "progress_activity" : "auto_fix_high"}
-                    </span>
-                    {appliedActions[pat.id] ? "Recomandare Aplicată" : applyingId === pat.id ? "Se aplică..." : pat.recommendation?.label || "Aplică Ajustarea"}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApply(pat)}
+                      disabled={appliedActions[pat.id] || applyingId === pat.id}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2",
+                        appliedActions[pat.id]
+                          ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 cursor-default"
+                          : "bg-primary text-white hover:bg-primary/90 shadow-lg shadow-primary/20"
+                      )}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {appliedActions[pat.id] ? "check" : applyingId === pat.id ? "progress_activity" : "magic_button"}
+                      </span>
+                      {appliedActions[pat.id] ? "Fix Aplicat" : applyingId === pat.id ? "Se aplică..." : "Aplică Fix Automat"}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
           )}
         </div>
       </Card>
+
+      <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex gap-3">
+        <span className="material-symbols-outlined text-amber-500">info</span>
+        <p className="text-[11px] text-amber-800 dark:text-amber-200">
+          <span className="font-bold">Notă:</span> Promptul generat conține detalii tehnice despre eroare, modelul afectat și contextul global. Folosiți-l în chat-ul cu Claude (Agent) pentru a primi asistență personalizată în refactorizarea aplicației sau ajustarea prompturilor.
+        </p>
+      </div>
     </div>
   );
 }
+
