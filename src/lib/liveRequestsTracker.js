@@ -331,12 +331,12 @@ export function cancelLiveRequest(id, { reason = "Cancelled from dashboard" } = 
     try { abort(new Error(reason)); } catch { /* best effort */ }
   }
 
-  // If the pipeline hasn't unwound within 3s, force it out manually.
+  // If the pipeline hasn't unwound within 1s, force it out manually.
   const timer = setTimeout(() => {
     if (tracker.active.has(id)) {
       trackRequestError(id, { error: reason, statusCode: 499 });
     }
-  }, 3000);
+  }, 1000);
   timer?.unref?.();
 
   return { found: true, item };
