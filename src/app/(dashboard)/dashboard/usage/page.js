@@ -264,15 +264,30 @@ function UsageContent() {
     return Array.from(groups.values());
   }, [filteredItems]);
 
+  // Determine which providers have any request (active or history) to show only live ones in dropdown
+  const providersWithRequests = useMemo(() => {
+    const set = new Set();
+    for (const item of [...snapshot.active, ...snapshot.history]) {
+      if (item.provider) {
+        set.add(item.provider);
+      }
+    }
+    return set;
+  }, [snapshot.active, snapshot.history]);
+
   const groupedAvailableModels = useMemo(() => {
     const map = new Map();
     for (const m of availableModels) {
       const p = m.provider || "Other";
+      // Only show providers that have at least one request (live/conected)
+      if (!providersWithRequests.has(p)) {
+        continue;
+      }
       if (!map.has(p)) map.set(p, []);
       map.get(p).push(m);
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [availableModels]);
+  }, [availableModels, providersWithRequests]);
 
   const toggleGroup = (groupId) => {
     setExpandedGroups((prev) => ({
