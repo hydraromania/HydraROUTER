@@ -370,10 +370,8 @@ class RateLimitTracker {
   async recordManualBlock(keyId, modelId, providerId) {
     if (!keyId || keyId === "noauth") return { manualBlockUntil: 0 };
     const tracker = await this.getModelTracker(keyId, modelId, providerId);
-    // Block until next RPD reset (same duration, but explicitly marked as manual)
-    const limits = getModelRateLimits(providerId, modelId);
-    const rpdReset = getRpdResetTime(limits.rpdResetHour, limits.resetTz);
-    tracker.manualBlockUntil = rpdReset.getTime();
+    // Block until manually unblocked (far-future timestamp, same as permanent block)
+    tracker.manualBlockUntil = 4102444800000; // 2100-01-01
     await updateManualBlockUntil(keyId, modelId, providerId, tracker.manualBlockUntil);
     return { manualBlockUntil: tracker.manualBlockUntil };
   }
