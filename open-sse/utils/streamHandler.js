@@ -1,5 +1,5 @@
 // Stream handler with disconnect detection - shared for all providers
-import { STREAM_STALL_TIMEOUT_MS } from "../config/runtimeConfig.js";
+import { STREAM_STALL_TIMEOUT_MS, MAX_REQUEST_DURATION_MS } from "../config/runtimeConfig.js";
 import { dbg, isDebugEnabled } from "./debugLog.js";
 
 // Get HH:MM:SS timestamp
@@ -251,5 +251,129 @@ export function pipeWithDisconnect(providerResponse, transformStream, streamCont
     wrappedController,
     onAbortTerminal
   );
+}
+
+/**
+ * Wraps an SSE stream with a hard 450s duration watchdog.
+ * If the stream reaches 450s without completing, onReroute() is called to switch
+ * the upstream source to an alternative active model/key without breaking the downstream client SSE.
+ */
+export function createReroutableStream({
+  initialStream,
+  streamController,
+  requestStartTime,
+  maxDurationMs = MAX_REQUEST_DURATION_MS,
+  onReroute = null,
+  log = null,
+  reqTag = "",
+  provider = "",
+  model = ""
+}) {
+  if (!onReroute) {
+    return initialStream;
+  }
+
+  let activeReader = initialStream.getReader();
+  let rerouted = false;
+  let isRerouting = false;
+  let fallbackAttached = false;
+  let isDone = false;
+  let rerouteTimer = null;
+  let reroutePromiseResolve = null;
+  const reroutePromise = new Promise((res) => { reroutePromiseResolve = res; });
+
+  const clearTimer = () => {
+    if (rerouteTimer) {
+      clearTimeout(rerouteTimer);
+      rerouteTimer = null;
+    }
+  };
+
+  const elapsed = Date.now() - (requestStartTime || streamController?.startTime || Date.now());
+  const remainingMs = Math.max(50, maxDurationMs - elapsed);
+
+  rerouteTimer = setTimeout(async () => {
+    if (isDone || rerouted) return;
+    rerouted = true;
+    isRerouting = true;
+    const durSec = Math.round((Date.now() - (requestStartTime || streamController?.startTime || Date.now())) / 1000);
+    const msg = `[REROUTE 450s] Duration reached ${durSec}s on ${provider}/${model} (stuck stream) → auto-rerouting to alternative active model/key without blocking`;
+    if (log?.line) {
+      log.line(reqTag, "⏰", msg);
+    } else {
+      console.warn(msg);
+    }
+
+    try {
+      // Abort the stuck upstream
+      await activeReader.cancel().catch(() => {});
+      streamController?.abort?.();
+    } catch {}
+
+    try {
+      const fallbackStream = await onReroute();
+      if (fallbackStream) {
+        activeReader = fallbackStream.getReader();
+        fallbackAttached = true;
+        if (log?.line) {
+          log.line(reqTag, "▶", `[REROUTE 450s] Successfully attached alternative stream`);
+        }
+      }
+    } catch (err) {
+      console.error("[REROUTE 450s] Failed to acquire fallback stream:", err?.message || err);
+    } finally {
+      isRerouting = false;
+      reroutePromiseResolve?.();
+    }
+  }, remainingMs);
+  rerouteTimer?.unref?.();
+
+  return new ReadableStream({
+    async pull(controller) {
+      if (!streamController.isConnected()) {
+        clearTimer();
+        controller.close();
+        return;
+      }
+
+      while (true) {
+        try {
+          const { done, value } = await activeReader.read();
+          if (done) {
+            // If the old reader was cancelled due to 450s reroute, wait for fallback stream
+            if (isRerouting || (rerouted && !fallbackAttached)) {
+              await reroutePromise;
+              if (fallbackAttached) {
+                continue;
+              }
+            }
+            isDone = true;
+            clearTimer();
+            controller.close();
+            return;
+          }
+          controller.enqueue(value);
+          return;
+        } catch (error) {
+          // If error happened while rerouting, wait for new fallback reader
+          if (isRerouting || (rerouted && !fallbackAttached)) {
+            await reroutePromise;
+            if (fallbackAttached) {
+              continue;
+            }
+          }
+          isDone = true;
+          clearTimer();
+          controller.error(error);
+          return;
+        }
+      }
+    },
+    cancel(reason) {
+      isDone = true;
+      clearTimer();
+      activeReader.cancel(reason).catch(() => {});
+    }
+  });
 }
 

@@ -734,6 +734,41 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       // Detect source format by endpoint + body
       sourceFormatOverride: request?.url ? detectFormatByEndpoint(new URL(request.url).pathname, body) : null,
       responseFormatOverride,
+      onTimeoutReroute: async () => {
+        const currentModelStr = `${provider}/${model}`;
+        log.warn("REROUTE_450S", `Duration reached 450s on ${currentModelStr} (key ${credentials.connectionId}). Auto-rerouting to alternative key/model without blocking.`);
+
+        // 1. Try another active connection/key for the same provider
+        try {
+          const excludeConns = new Set([credentials.connectionId]);
+          const otherCreds = await getProviderCredentials(provider, excludeConns, model).catch(() => null);
+          if (otherCreds && !otherCreds.allRateLimited && otherCreds.connectionId !== credentials.connectionId) {
+            log.info("REROUTE_450S", `Switching to alternative key ${otherCreds.connectionId} for ${currentModelStr}`);
+            const altRes = await handleSingleModelChat(body, currentModelStr, clientRawRequest, request, apiKey);
+            if (altRes?.ok && altRes.body) {
+              return altRes.body;
+            }
+          }
+        } catch (e) {
+          log.warn("REROUTE_450S", `Same-provider key rotation failed: ${e.message}`);
+        }
+
+        // 2. Otherwise find any active fallback model across all providers
+        try {
+          const fallbackModel = await findAnyFallbackModel(body, [currentModelStr, model]);
+          if (fallbackModel) {
+            log.info("REROUTE_450S", `Switching to alternative active model: ${fallbackModel}`);
+            const altRes = await handleSingleModelChat(body, fallbackModel, clientRawRequest, request, apiKey);
+            if (altRes?.ok && altRes.body) {
+              return altRes.body;
+            }
+          }
+        } catch (e) {
+          log.warn("REROUTE_450S", `Fallback model selection failed: ${e.message}`);
+        }
+
+        return null;
+      },
       onCredentialsRefreshed: async (newCreds) => {
         await updateProviderCredentials(credentials.connectionId, {
           ...newCreds,
@@ -766,8 +801,9 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       return result.response;
     }
 
-    // Record timeout or server errors for model blocking (3 strikes -> 24h block)
-    if (result.status === 504 || result.status === 503) {
+    // Record timeout or server errors for model blocking (3 strikes -> 24h block),
+    // but SKIP blocking if this was a 450s duration timeout (user explicitly requested no block).
+    if (!result.isTimeout450s && (result.status === 504 || result.status === 503)) {
       const { recordModelFailure } = await import("open-sse/services/combo.js");
       recordModelFailure(`${provider}/${model}`, result.status);
     }

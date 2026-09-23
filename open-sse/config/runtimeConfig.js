@@ -55,6 +55,10 @@ export const STREAM_STALL_TIMEOUT_MS = envMs("STREAM_STALL_TIMEOUT_MS", 250 * 10
 // Time-to-first-token timeout (prompt prefill). Env: STREAM_FIRST_CHUNK_TIMEOUT_MS.
 export const STREAM_FIRST_CHUNK_TIMEOUT_MS = envMs("STREAM_FIRST_CHUNK_TIMEOUT_MS", 200 * 1000);
 
+// Hard duration ceiling: if an outbound request / stream reaches 450s, auto-reroute to another active model/key.
+// Env: MAX_REQUEST_DURATION_MS (default 450s).
+export const MAX_REQUEST_DURATION_MS = envMs("MAX_REQUEST_DURATION_MS", 450 * 1000);
+
 // Fetch connect timeout: abort if upstream doesn't return response headers within this duration
 export const FETCH_CONNECT_TIMEOUT_MS = envMs("FETCH_CONNECT_TIMEOUT_MS", 180 * 1000);
 

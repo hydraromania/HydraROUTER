@@ -4,14 +4,12 @@
  * DeepSeek V4 thinking mode rejects follow-up requests whose assistant
  * messages omit `reasoning_content` ("The `reasoning_content` in the thinking
  * mode must be passed back to the API."). OpenAI-format clients strip it, so
- * the injector echoes a placeholder back. These tests lock that behavior and
- * guard that the OpenCode executor (which routes deepseek-v4-flash-free)
- * actually runs the injector.
+ * the injector echoes a placeholder back. These tests lock that behavior.
+ * (The injector also runs inside DefaultExecutor.transformRequest.)
  */
 
 import { describe, it, expect } from "vitest";
 import { injectReasoningContent } from "../../open-sse/utils/reasoningContentInjector.js";
-import { OpenCodeExecutor } from "../../open-sse/executors/opencode.js";
 
 const assistantWithToolCall = {
   role: "assistant",
@@ -147,14 +145,3 @@ describe("injectReasoningContent — MiniMax thinking round-trip", () => {
   });
 });
 
-describe("OpenCodeExecutor — issue #1543 regression", () => {
-  it("runs the injector so deepseek-v4-flash-free round-trips reasoning_content", () => {
-    const executor = new OpenCodeExecutor();
-    const out = executor.transformRequest(
-      "deepseek-v4-flash-free",
-      bodyWith([{ role: "user", content: "hi" }, assistantWithToolCall]),
-    );
-    const assistant = out.messages.find((m) => m.role === "assistant");
-    expect(assistant.reasoning_content).toBeDefined();
-  });
-});

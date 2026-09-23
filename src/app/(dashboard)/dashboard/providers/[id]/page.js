@@ -1159,7 +1159,7 @@ function SortableConnectionItem({
             <span className="material-symbols-outlined text-text-muted text-[18px]">link_off</span>
             <span className="text-sm text-text-main">None (unbind all)</span>
           </button>
-          {providerId === "opencode" && (
+          {providerId === "opencode-go" && (
           <button
             onClick={() => handleApplySinglePool("__auto__")}
             disabled={bulkUpdatingProxy || activePools.length === 0}

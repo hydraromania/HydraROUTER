@@ -5,6 +5,7 @@ import { getRateLimitsForProvider } from "@/lib/db/index.js";
 import { rateLimitTracker } from "open-sse/services/rateLimitTracker.js";
 import { getModelRateLimits, hasRateLimitConfig, getRpdResetTime, getConfiguredModelsForProvider, setModelLimitOverrides, DEFAULT_RESET_TZ } from "open-sse/config/modelRateLimits.js";
 import { getBlockedModels, unblockModel } from "open-sse/services/combo.js";
+import { getDisabledByProvider } from "@/lib/disabledModelsDb";
 
 export const dynamic = "force-dynamic";
 
@@ -63,9 +64,13 @@ export async function GET(request) {
 
     const modelIds = modelId ? [modelId] : await getVisibleModelIds(providerId);
 
+    // Filter out disabled models
+    const disabledModelIds = await getDisabledByProvider(providerId);
+    const activeModelIds = modelIds.filter((m) => !disabledModelIds.includes(m));
+
     // One row per model x connection, tracker data merged in (0 usage when untouched)
     const rows = [];
-    for (const mId of modelIds) {
+    for (const mId of activeModelIds) {
       const trackerRows = await rateLimitTracker.getAllKeysUsage(mId, providerId);
       const byKey = new Map(trackerRows.map((r) => [r.keyId, r]));
       const limits = getModelRateLimits(providerId, mId);
@@ -244,8 +249,7 @@ export async function POST(request) {
 
       for (const conn of providerConns) {
         if (action === "blockAllModel") {
-          // Block only active connections — inactive ones don't route traffic.
-          if (conn.isActive === false) continue;
+          // Block all connections for this provider so no requests route to this model
           await rateLimitTracker.recordManualBlock(conn.id, model, provider);
         } else {
           // Unblock clears every row (active or not) so no stale block survives.

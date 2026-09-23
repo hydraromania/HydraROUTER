@@ -65,7 +65,7 @@ export {
 
 // Handlers
 export { handleChatCore, isTokenExpiringSoon } from "./handlers/chatCore.js";
-export { createStreamController, pipeWithDisconnect, createDisconnectAwareStream } from "./utils/streamHandler.js";
+export { createStreamController, pipeWithDisconnect, createDisconnectAwareStream, createReroutableStream } from "./utils/streamHandler.js";
 
 // Executors
 export { getExecutor, hasSpecializedExecutor } from "./executors/index.js";

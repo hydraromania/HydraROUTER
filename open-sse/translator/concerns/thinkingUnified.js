@@ -148,7 +148,7 @@ function normalizeOpenAILevel(level, supportedLevels) {
 }
 
 function toGeminiThinkingLevel(cfg) {
-  const raw = cfg.mode === "auto" ? "high" : (toLevel(cfg) || "high");
+  const raw = cfg.mode === "auto" ? "medium" : (toLevel(cfg) || "medium");
   return effortToThinkingLevel(raw);
 }
 
@@ -165,16 +165,16 @@ const GEMINI_LEVEL_OUTPUT_FLOOR = {
   minimal: 4096,
   low: 8192,
   medium: 16384,
-  high: 65535,
+  high: 32768, // Reduced from 65535 to prevent Flash truncation
 };
 
 function geminiBudgetOutputFloor(budget) {
-  if (budget === -1) return 32768;
-  if (!Number.isFinite(budget)) return 32768;
-  if (budget <= 1024) return 8192;
-  if (budget <= 8192) return 16384;
-  if (budget <= 24576) return 32768;
-  return 65535;
+  if (budget === -1) return 16384; // Reduced from 32768
+  if (!Number.isFinite(budget)) return 16384;
+  if (budget <= 1024) return 4096; // Reduced from 8192
+  if (budget <= 8192) return 8192; // Reduced from 16384
+  if (budget <= 24576) return 16384; // Reduced from 32768
+  return 32768; // Reduced from 65535
 }
 
 function geminiLevelOutputFloor(level) {

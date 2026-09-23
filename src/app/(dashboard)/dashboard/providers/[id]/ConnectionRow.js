@@ -23,8 +23,8 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
   const proxyPoolMap = new Map((proxyPools || []).map((pool) => [pool.id, pool]));
   const boundProxyPoolId = connection.providerSpecificData?.proxyPoolId || null;
   const isAutoProxy = boundProxyPoolId === "__auto__";
-  // Auto proxy rotation is only available for the opencode provider.
-  const showAutoProxy = connection.provider === "opencode";
+  // Auto proxy rotation is only available for the opencode-go provider.
+  const showAutoProxy = connection.provider === "opencode-go";
   const boundProxyPool = !boundProxyPoolId || isAutoProxy ? null : proxyPoolMap.get(boundProxyPoolId);
   const hasLegacyProxy = connection.providerSpecificData?.connectionProxyEnabled === true && !!connection.providerSpecificData?.connectionProxyUrl;
   const hasAnyProxy = !!boundProxyPoolId || hasLegacyProxy;

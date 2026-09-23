@@ -38,11 +38,11 @@ async function normalizeProxyPoolId(proxyPoolId, provider = null) {
     return { proxyPoolId: null };
   }
 
-  // "Auto" binding — only available for the opencode provider. Rotates
+  // "Auto" binding — only available for the opencode-go provider. Rotates
   // through all active proxy pools at request time.
   if (normalizedId === "__auto__") {
-    if (provider !== "opencode") {
-      return { error: "Auto proxy pool is only available for the opencode provider" };
+    if (provider !== "opencode-go") {
+      return { error: "Auto proxy pool is only available for the opencode-go provider" };
     }
     return { proxyPoolId: "__auto__" };
   }

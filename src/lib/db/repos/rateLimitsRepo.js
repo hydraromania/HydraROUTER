@@ -185,5 +185,5 @@ export async function deleteRateLimit(keyId, modelId, providerId) {
 
 export async function cleanupExpiredRateLimits(now = Date.now()) {
   const db = await getAdapter();
-  db.run(`DELETE FROM rateLimits WHERE rpdResetAt < ? AND rpmResetAt < ? AND tpmResetAt < ? AND (rateLimitedUntil = 0 OR rateLimitedUntil < ?)`, [now, now, now, now]);
+  db.run(`DELETE FROM rateLimits WHERE rpdResetAt < ? AND rpmResetAt < ? AND tpmResetAt < ? AND (rateLimitedUntil = 0 OR rateLimitedUntil < ?) AND (manualBlockUntil = 0 OR manualBlockUntil < ?)`, [now, now, now, now, now]);
 }

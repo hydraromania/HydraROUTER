@@ -741,14 +741,6 @@
       }
     ]
   },
-  "opencode": {
-    "baseUrl": "https://opencode.ai",
-    "headers": {
-      "x-opencode-client": "desktop"
-    },
-    "noAuth": true,
-    "format": "openai"
-  },
   "openrouter": {
     "baseUrl": "https://openrouter.ai/api/v1/chat/completions",
     "thinkingFormat": "openai",

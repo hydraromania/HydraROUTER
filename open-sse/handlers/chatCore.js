@@ -9,7 +9,7 @@ import { createRequestLogger } from "../utils/requestLogger.js";
 import { getModelTargetFormat, getModelSupportedFormats, getModelStrip, getModelUpstreamId, getModelType, PROVIDER_ID_TO_ALIAS } from "../config/providerModels.js";
 import { PROVIDERS } from "../config/providers.js";
 import { createErrorResult, parseUpstreamError, formatProviderError } from "../utils/error.js";
-import { HTTP_STATUS, TOKEN_SAVER_HEADER } from "../config/runtimeConfig.js";
+import { HTTP_STATUS, TOKEN_SAVER_HEADER, MAX_REQUEST_DURATION_MS } from "../config/runtimeConfig.js";
 import { handleBypassRequest } from "../utils/bypassHandler.js";
 import { trackPendingRequest, appendRequestLog, saveRequestDetail, trackRequestStart, trackRequestError, registerLiveAbort } from "@/lib/usageDb.js";
 import { getExecutor } from "../executors/index.js";
@@ -62,7 +62,7 @@ export function stripContinuityFields(body) {
   return body;
 }
 
-export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, responseFormatOverride, providerThinking, ratePacing, stripTools }) {
+export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, onTimeoutReroute, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, responseFormatOverride, providerThinking, ratePacing, stripTools }) {
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
   // Stable per-session color so all lines of one CLI conversation share a tag
@@ -423,8 +423,19 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // Most executors return their registry format. Cursor AgentService is an
   // exception: it is decoded by the executor into OpenAI-compatible output.
   let providerResponseFormat = targetFormat;
+  let durationTimeout = null;
+  let isTimeout450s = false;
+  const remainingDurationMs = Math.max(1000, MAX_REQUEST_DURATION_MS - (Date.now() - requestStartTime));
+  durationTimeout = setTimeout(() => {
+    isTimeout450s = true;
+    log?.warn?.("TIMEOUT_450S", `Duration ceiling reached 450s for ${provider}/${model}. Aborting upstream fetch for auto-reroute.`);
+    try { streamController.abort(new Error("Request duration reached 450s")); } catch {}
+  }, remainingDurationMs);
+  durationTimeout?.unref?.();
+
   try {
     const result = await executor.execute({ model, body: translatedBody, stream, credentials, signal: streamController.signal, log, proxyOptions });
+    if (durationTimeout) { clearTimeout(durationTimeout); durationTimeout = null; }
     providerResponse = result.response;
     providerUrl = result.url;
     providerHeaders = result.headers;
@@ -432,19 +443,26 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     providerResponseFormat = result.responseFormat || targetFormat;
     reqLogger.logTargetRequest(providerUrl, providerHeaders, finalBody);
   } catch (error) {
+    if (durationTimeout) { clearTimeout(durationTimeout); durationTimeout = null; }
     trackPendingRequest(model, provider, connectionId, false, true);
-    trackRequestError(liveReqId, { error, statusCode: error.name === "AbortError" ? 499 : HTTP_STATUS.BAD_GATEWAY });
-    appendRequestLog({ model, provider, connectionId, status: `FAILED ${error.name === "AbortError" ? 499 : HTTP_STATUS.BAD_GATEWAY}` }).catch(() => { });
+    const statusCode = isTimeout450s ? HTTP_STATUS.GATEWAY_TIMEOUT : (error.name === "AbortError" ? 499 : HTTP_STATUS.BAD_GATEWAY);
+    trackRequestError(liveReqId, { error: isTimeout450s ? "Request timeout (450s duration reached)" : error, statusCode });
+    appendRequestLog({ model, provider, connectionId, status: `FAILED ${statusCode}` }).catch(() => { });
     saveRequestDetail(buildRequestDetail({
       provider, model, connectionId,
       latency: { ttft: 0, total: Date.now() - requestStartTime },
       tokens: { prompt_tokens: 0, completion_tokens: 0 },
       request: extractRequestConfig(body, stream),
       providerRequest: translatedBody || null,
-      response: { error: error.message || String(error), status: error.name === "AbortError" ? 499 : 502, thinking: null },
+      response: { error: isTimeout450s ? "Request duration reached 450s (timeout)" : (error.message || String(error)), status: statusCode, thinking: null },
       pxpipe: pxpipeSummary,
       status: "error"
     })).catch(() => { });
+
+    if (isTimeout450s) {
+      streamController.handleError(new Error("Request duration reached 450s (timeout)"));
+      return createErrorResult(HTTP_STATUS.GATEWAY_TIMEOUT, `Request duration reached 450s for ${provider}/${model}`);
+    }
 
     if (error.name === "AbortError") {
       streamController.handleError(error);
@@ -568,7 +586,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     }
   }
 
-  const sharedCtx = { provider, model, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, pxpipe: pxpipeSummary, reqTag, log, liveReqId };
+  const sharedCtx = { provider, model, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, onTimeoutReroute, pxpipe: pxpipeSummary, reqTag, log, liveReqId };
   const appendLog = (extra) => appendRequestLog({ model, provider, connectionId, ...extra }).catch(() => { });
   // NOTE: this deliberately does NOT end the live entry. The terminal handlers
   // (non-streaming / SSE→JSON / streaming onStreamComplete) each close it exactly

@@ -39,8 +39,8 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
   const proxyPoolMap = new Map((proxyPools || []).map((p) => [p.id, p]));
   const boundProxyPoolId = connection.providerSpecificData?.proxyPoolId || null;
   const isAutoProxy = boundProxyPoolId === "__auto__";
-  // Auto proxy rotation is only available for the opencode provider.
-  const showAutoProxy = connection.provider === "opencode";
+  // Auto proxy rotation is only available for the opencode-go provider.
+  const showAutoProxy = connection.provider === "opencode-go";
   const boundProxyPool = !boundProxyPoolId || isAutoProxy ? null : proxyPoolMap.get(boundProxyPoolId);
   const hasLegacyProxy = connection.providerSpecificData?.connectionProxyEnabled === true && !!connection.providerSpecificData?.connectionProxyUrl;
   const hasAnyProxy = !!boundProxyPoolId || hasLegacyProxy;
@@ -280,7 +280,7 @@ function AddApiKeyModal({ isOpen, provider, providerName, proxyPools, onSave, on
           <input type="number" className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary" value={formData.priority} onChange={(e) => setFormData({ ...formData, priority: Number.parseInt(e.target.value) || 1 })} />
         </div>
         <Select label="Proxy Pool" value={formData.proxyPoolId} onChange={(e) => setFormData({ ...formData, proxyPoolId: e.target.value })}
-          options={[{ value: NONE, label: "None" }, ...((provider === "opencode") ? [{ value: "__auto__", label: "Auto (rotate)" }] : []), ...(proxyPools || []).map((p) => ({ value: p.id, label: p.name }))]} />
+          options={[{ value: NONE, label: "None" }, ...((provider === "opencode-go") ? [{ value: "__auto__", label: "Auto (rotate)" }] : []), ...(proxyPools || []).map((p) => ({ value: p.id, label: p.name }))]} />
         <div className="flex gap-2">
           <Button onClick={handleSubmit} fullWidth disabled={!formData.name || !formData.apiKey || saving}>
             {saving ? "Saving..." : "Save"}

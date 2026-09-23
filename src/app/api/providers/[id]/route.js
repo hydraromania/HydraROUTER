@@ -47,11 +47,11 @@ async function normalizeProxyPoolUpdate(proxyPoolIdInput, provider = null) {
     return { hasProxyPoolField: true, proxyPoolId: null };
   }
 
-  // "Auto" binding — only available for the opencode provider. Rotates
+  // "Auto" binding — only available for the opencode-go provider. Rotates
   // through all active proxy pools at request time.
   if (proxyPoolId === "__auto__") {
-    if (provider !== "opencode") {
-      return { hasProxyPoolField: true, error: "Auto proxy pool is only available for the opencode provider" };
+    if (provider !== "opencode-go") {
+      return { hasProxyPoolField: true, error: "Auto proxy pool is only available for the opencode-go provider" };
     }
     return { hasProxyPoolField: true, proxyPoolId: "__auto__" };
   }

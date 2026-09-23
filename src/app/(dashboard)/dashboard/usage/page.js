@@ -84,7 +84,7 @@ function UsageContent() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.models) {
-          setAvailableModels(data.models);
+          setAvailableModels(data.models.map(m => ({ ...m, disabled: false }))); // api/models already filters disabled. Add flag to be explicit.
         }
       })
       .catch(() => {});
@@ -283,6 +283,12 @@ function UsageContent() {
       if (!providersWithRequests.has(p)) {
         continue;
       }
+
+      // Skip disabled models (api/models already filters them, but be explicit for custom models/aliases)
+      if (m.disabled) {
+        continue;
+      }
+
       if (!map.has(p)) map.set(p, []);
       map.get(p).push(m);
     }
@@ -540,25 +546,31 @@ function UsageContent() {
                     </div>
 
                     {/* Group Table Body */}
-                    {expanded && (
-                      <div className="overflow-x-auto max-h-[500px] overflow-y-auto font-mono text-xs">
-                        <table className="w-full text-left border-collapse whitespace-nowrap">
-                          <thead className="sticky top-0 bg-surface/90 backdrop-blur border-b border-border z-10 font-sans text-[10px] uppercase tracking-wider text-text-muted">
-                            <tr>
-                              <th className="px-2 py-1 border-r border-border w-20">Status</th>
-                              <th className="px-2 py-1 border-r border-border w-14">Type</th>
-                              <th className="px-2 py-1 border-r border-border max-w-[120px]">API Key</th>
-                              <th className="px-2 py-1 border-r border-border min-w-[160px] max-w-[280px]">Model / Provider</th>
-                              <th className="px-2 py-1 border-r border-border max-w-[100px]">Account</th>
-                              <th className="px-2 py-1 border-r border-border max-w-[140px]">Proxy / Egress</th>
-                              <th className="px-2 py-1 border-r border-border text-right w-20">Tokens</th>
-                              <th className="px-2 py-1 border-r border-border text-right w-16">Duration</th>
-                              <th className="px-2 py-1 border-r border-border min-w-[120px]">Details</th>
-                              <th className="px-2 py-1 text-right w-24">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border/50">
-                            {group.items.map((item) => {
+                    {(expanded || group.activeCount > 0) && (() => {
+                      const itemsToRender = expanded
+                        ? group.items
+                        : group.items.filter((item) => item.status === "in_progress");
+                      const hiddenCompletedCount = group.items.length - itemsToRender.length;
+
+                      return (
+                        <div className="overflow-x-auto max-h-[500px] overflow-y-auto font-mono text-xs">
+                          <table className="w-full text-left border-collapse whitespace-nowrap">
+                            <thead className="sticky top-0 bg-surface/90 backdrop-blur border-b border-border z-10 font-sans text-[10px] uppercase tracking-wider text-text-muted">
+                              <tr>
+                                <th className="px-2 py-1 border-r border-border w-20">Status</th>
+                                <th className="px-2 py-1 border-r border-border w-14">Type</th>
+                                <th className="px-2 py-1 border-r border-border max-w-[120px]">API Key</th>
+                                <th className="px-2 py-1 border-r border-border min-w-[160px] max-w-[280px]">Model / Provider</th>
+                                <th className="px-2 py-1 border-r border-border max-w-[100px]">Account</th>
+                                <th className="px-2 py-1 border-r border-border max-w-[140px]">Proxy / Egress</th>
+                                <th className="px-2 py-1 border-r border-border text-right w-20">Tokens</th>
+                                <th className="px-2 py-1 border-r border-border text-right w-16">Duration</th>
+                                <th className="px-2 py-1 border-r border-border min-w-[120px]">Details</th>
+                                <th className="px-2 py-1 text-right w-24">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/50">
+                              {itemsToRender.map((item) => {
                               const isActive = item.status === "in_progress";
                               const isSuccess = item.status === "completed";
                               const isError = item.status === "error";
@@ -770,8 +782,29 @@ function UsageContent() {
                             })}
                           </tbody>
                         </table>
+
+                        {/* Indicator când grupul este închis dar are cereri finalizate ascunse */}
+                        {!expanded && hiddenCompletedCount > 0 && (
+                          <div
+                            onClick={() => toggleGroup(group.id)}
+                            className="px-3 py-1.5 bg-surface/80 border-t border-border/60 text-[10.5px] text-text-muted hover:text-text-main cursor-pointer flex items-center justify-between transition-colors select-none group/expand"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[13px] text-text-muted group-hover/expand:text-primary transition-colors">
+                                unfold_more
+                              </span>
+                              <span>
+                                + {hiddenCompletedCount} {hiddenCompletedCount === 1 ? "cerere finalizată ascunsă" : "cereri finalizate ascunse"}
+                              </span>
+                            </div>
+                            <span className="text-primary font-medium hover:underline text-[10px]">
+                              Extinde tot grupul
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    );
+                  })()}
                   </Card>
                 );
               })

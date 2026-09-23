@@ -11,8 +11,8 @@ const BULK_PLACEHOLDER = `name1|sk-key1\nname2|sk-key2\nsk-key-only-auto-named`;
 export default function AddApiKeyModal({ isOpen, provider, providerName, isCompatible, isAnthropic, authType, authHint, website, proxyPools, error, existingNames, onSave, onBulkDone, onClose }) {
   const NONE_PROXY_POOL_VALUE = "__none__";
   const AUTO_PROXY_POOL_VALUE = "__auto__";
-  // Auto proxy rotation is only available for the opencode provider.
-  const showAutoProxyPool = provider === "opencode";
+  // Auto proxy rotation is only available for the opencode-go provider.
+  const showAutoProxyPool = provider === "opencode-go";
   const isOllamaLocal = provider === "ollama-local";
   const isCookie = authType === "cookie";
   const isXaiApiKey = provider === "xai" && !isCookie;

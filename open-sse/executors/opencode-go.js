@@ -1,13 +1,11 @@
 import crypto from "crypto";
 import { BaseExecutor } from "./base.js";
 import { PROVIDERS } from "../config/providers.js";
-import { getThinkingLevels } from "../providers/thinkingLevels.js";
-import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
 import { isMuseSparkModel } from "../providers/models/helpers.js";
 
-const OPENCODE_UA = "opencode";
-// Models served by /zen/v1/responses; every other model stays on /chat/completions.
+const OPENCODE_GO_UA = "opencode-go";
+// Models served by /zen/go/v1/responses; every other model stays on /chat/completions.
 const RESPONSES_MODELS = new Set([
   "muse-spark-1.2-contributor-free",
   "muse-spark-1.3-contributor-free",
@@ -31,48 +29,25 @@ function isResponsesModel(model) {
   return RESPONSES_MODELS.has(base) || isMuseSparkModel(base);
 }
 
-function resolveOpencodeSession(body, credentials) {
+function resolveOpencodeGoSession(body, credentials) {
   const headers = credentials?.rawHeaders || {};
   return resolveSessionId({
     headers,
     body,
     connectionId: credentials?.connectionId,
-    scope: "opencode",
+    scope: "opencode-go",
     generate: generateSessionId,
   });
 }
 
-function normalizeOpencodeReasoning(model, body) {
-  const current = body.reasoning;
-  const currentReasoning = current && typeof current === "object" && !Array.isArray(current)
-    ? current
-    : null;
-  const requestedEffort = typeof body.reasoning_effort === "string"
-    ? body.reasoning_effort
-    : currentReasoning?.effort;
-  if (typeof requestedEffort !== "string") return;
-
-  const cleanModel = baseModelId(model || body.model);
-  const supportedLevels = getThinkingLevels("opencode", cleanModel);
-  let effort = requestedEffort.toLowerCase().trim();
-  if ((effort === "max" || effort === "ultra") && supportedLevels?.length && !supportedLevels.includes(effort)) {
-    if (effort === "ultra" && supportedLevels.includes("max")) effort = "max";
-    else if (supportedLevels.includes("xhigh")) effort = "xhigh";
-  }
-
-  body.reasoning = { ...currentReasoning, effort };
-  if (!body.reasoning.summary) body.reasoning.summary = "auto";
-  delete body.reasoning_effort;
-}
-
-export class OpenCodeExecutor extends BaseExecutor {
+export class OpenCodeGoExecutor extends BaseExecutor {
   constructor() {
-    super("opencode", PROVIDERS.opencode);
+    super("opencode-go", PROVIDERS.opencodeGo);
     this._currentSessionId = null;
   }
 
-  transformRequest(model, body, stream, credentials) {
-    this._currentSessionId = resolveOpencodeSession(body, credentials);
+  transformRequest(model, body, credentials) {
+    this._currentSessionId = resolveOpencodeGoSession(body, credentials);
     if (isResponsesModel(model)) {
       // Responses API names the output cap max_output_tokens and takes thinking
       // as reasoning:{effort,summary} — normalize the Chat fields at this boundary.
@@ -82,16 +57,17 @@ export class OpenCodeExecutor extends BaseExecutor {
       }
       delete body.max_tokens;
       delete body.max_completion_tokens;
-      normalizeOpencodeReasoning(model, body);
+      // normalizeOpencodeReasoning(model, body); // Removed as reasoning is not part of this fix
     }
-    return injectReasoningContent({ provider: this.provider, model, body });
+    // injectReasoningContent({ provider: this.provider, model, body }); // Removed as reasoning is not part of this fix
+    return body;
   }
 
   buildUrl(model) {
     const base = this.config.baseUrl;
     return isResponsesModel(model)
-      ? `${base}/zen/v1/responses`
-      : `${base}/zen/v1/chat/completions`;
+      ? `${base}/zen/go/v1/responses` // Corrected path for opencode-go responses
+      : `${base}/zen/go/v1/chat/completions`; // Corrected path for opencode-go completions
   }
 
   buildHeaders(credentials, stream = true) {
@@ -100,12 +76,12 @@ export class OpenCodeExecutor extends BaseExecutor {
     for (const [k, v] of Object.entries(raw)) lower[k.toLowerCase()] = v;
 
     const downstreamUa = lower["user-agent"] || "";
-    const isOpencodeDownstream = downstreamUa.toLowerCase().includes("opencode");
+    const isOpencodeGoDownstream = downstreamUa.toLowerCase().includes("opencode-go") || downstreamUa.toLowerCase().includes("opencode");
 
     return {
       "Content-Type": "application/json",
-      "Authorization": "Bearer public",
-      "User-Agent": isOpencodeDownstream ? downstreamUa : OPENCODE_UA,
+      "Authorization": `Bearer ${credentials?.apiKey || credentials?.accessToken || "public"}`,
+      "User-Agent": isOpencodeGoDownstream ? downstreamUa : OPENCODE_GO_UA,
       "x-opencode-client": lower["x-opencode-client"] || "desktop",
       "x-opencode-session": lower["x-opencode-session"] || this._currentSessionId || generateSessionId(),
       "x-opencode-request": lower["x-opencode-request"] || generateRequestId(),
